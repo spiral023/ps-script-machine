@@ -1,0 +1,89 @@
+name: CI - PowerShell Quality & Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  analyze:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer `
+              -Path . `
+              -Recurse `
+              -Settings ./PSScriptAnalyzerSettings.psd1 `
+              -EnableExit `
+              -Severity Error, Warning
+
+          if ($results) {
+              $results | Format-Table -AutoSize
+          }
+
+  test:
+    name: Pester Tests
+    runs-on: windows-latest
+    needs: analyze
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -Scope CurrentUser -Force -SkipPublisherCheck -MinimumVersion 5.0
+
+      - name: Run Pester Tests
+        shell: pwsh
+        run: |
+          $configuration = [PesterConfiguration]@{
+              Run        = @{
+                  Path     = './tests'
+                  PassThru = $true
+              }
+              Output     = @{
+                  Verbosity = 'Detailed'
+              }
+              TestResult = @{
+                  Enabled       = $true
+                  OutputFormat  = 'NUnitXml'
+                  OutputPath    = 'TestResults/test-results.xml'
+              }
+              CodeCoverage = @{
+                  Enabled = $true
+                  Path    = './*.ps1'
+              }
+          }
+
+          if (-not (Test-Path 'TestResults')) {
+              New-Item -ItemType Directory -Path 'TestResults' | Out-Null
+          }
+
+          $result = Invoke-Pester -Configuration $configuration
+
+          if ($result.FailedCount -gt 0) {
+              Write-Error "$($result.FailedCount) Test(s) fehlgeschlagen."
+              exit 1
+          }
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults/

@@ -1,0 +1,79 @@
+{
+    // PowerShell-Einstellungen
+    "powershell.scriptAnalysis.enable": true,
+    "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
+    "powershell.codeFormatting.preset": "Custom",
+    "powershell.codeFormatting.openBraceOnSameLine": true,
+    "powershell.codeFormatting.newLineAfterOpenBrace": true,
+    "powershell.codeFormatting.newLineAfterCloseBrace": true,
+    "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipelineItem",
+    "powershell.codeFormatting.indentationSize": 4,
+    "powershell.codeFormatting.whitespaceBeforeOpenBrace": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenParen": true,
+    "powershell.codeFormatting.whitespaceAroundOperator": true,
+    "powershell.codeFormatting.whitespaceAfterPipe": true,
+    "powershell.codeFormatting.whitespaceBeforeSemicolon": false,
+    "powershell.codeFormatting.whitespaceAfterSemicolon": true,
+    "powershell.codeFormatting.whitespaceAroundSeparator": true,
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "powershell.codeFormatting.alignPropertyValuePairs": true,
+    "powershell.codeFormatting.useConstantStrings": false,
+    "powershell.codeFormatting.autoCorrectAliases": true,
+
+    // Pester-Integration
+    "powershell.pester.useLegacyCodeLens": false,
+    "powershell.pester.outputVerbosity": "Detailed",
+    "powershell.pester.debugOutputVerbosity": "Diagnostic",
+
+    // Datei-Einstellungen
+    "files.encoding": "utf8",
+    "files.eol": "\r\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "files.associations": {
+        "*.ps1": "powershell",
+        "*.psm1": "powershell",
+        "*.psd1": "powershell",
+        "*.ps1xml": "xml"
+    },
+
+    // Editor-Einstellungen
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.rulers": [120],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "[powershell]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.wordWrap": "off",
+        "editor.defaultFormatter": "ms-vscode.powershell"
+    },
+
+    // Spell-Checker (falls installiert)
+    "cSpell.language": "en,de",
+    "cSpell.enabled": true,
+    "cSpell.words": [
+        "vCenter",
+        "vSphere",
+        "ESXi",
+        "PowerCLI",
+        "VMware",
+        "CDP",
+        "Pester",
+        "PSScriptAnalyzer",
+        "vsphere",
+        "VLAN",
+        "MTU",
+        "NetworkSystem",
+        "QueryNetworkHint",
+        "VIServer",
+        "VMHost",
+        "Get-VMHost",
+        "Connect-VIServer",
+        "Disconnect-VIServer",
+        "Get-Cluster",
+        "Get-View",
+        "Get-VMHostNetworkAdapter"
+    ]
+}

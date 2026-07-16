@@ -1,0 +1,22 @@
+{
+    "logging": {
+        "level": "INFO",
+        "consoleOnly": false,
+        "logDirectory": "C:/Reports/Logs"
+    },
+    "export": {
+        "defaultFormat": "CSV",
+        "csvDelimiter": ";",
+        "csvEncoding": "Windows-1252",
+        "jsonIndent": 2
+    },
+    "powercli": {
+        "ignoreCertificates": true,
+        "participateInCEIP": false,
+        "defaultPort": 443
+    },
+    "secrets": {
+        "vaultName": "VMwareVault",
+        "useSecretManagement": true
+    }
+}

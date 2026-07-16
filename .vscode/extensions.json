@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "ms-vscode.powershell",
+        "ms-vscode-remote.remote-ssh",
+        "streetsidesoftware.code-spell-checker",
+        "streetsidesoftware.code-spell-checker-german",
+        "redhat.vscode-yaml",
+        "GitHub.vscode-pull-request-github",
+        "eamodio.gitlens"
+    ]
+}

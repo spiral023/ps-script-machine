@@ -1,0 +1,35 @@
+# Temporäre Dateien
+*.tmp
+*.temp
+.tmp_*
+
+# PowerShell-Ausgaben
+*.csv
+*.xlsx
+*.xls
+*.log
+*.txt
+!README.txt
+
+# Credentials & Secrets
+*.psd1.bak
+*.pfx
+*.key
+*.pem
+*.cert
+Vault/
+secrets/
+
+# VSCode
+.vscode/*.local
+
+# Test-Artefakte
+TestResults/
+Coverage/
+*.coverage
+*.xml.bak
+
+# OS-Dateien
+Thumbs.db
+desktop.ini
+.DS_Store
