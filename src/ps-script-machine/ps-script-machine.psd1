@@ -24,7 +24,8 @@
     FunctionsToExport    = @(
         'Get-CdpNetworkInfo',
         'Get-VMHostNetworkInfo',
-        'Export-ModuleData'
+        'Export-ModuleData',
+        'Select-VIServerTarget'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()
