@@ -1,81 +1,138 @@
-# Contributing Guidelines
+# Contributing to ps-script-machine
 
-## Übersicht
+Thank you for your interest in contributing! This document describes how to contribute to the project.
 
-Vielen Dank für dein Interesse an der Mitwirkung an `ps-script-machine`! Dieses Dokument beschreibt die Regeln und Prozesse für die Entwicklung von PowerShell-Skripten in diesem Repository.
+## Getting Started
 
-## Entwicklungsprozess
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/<your-username>/ps-script-machine.git`
+3. Create a feature branch: `git checkout -b feature/my-new-function`
+4. Make your changes
+5. Run the build: `.\scripts\Invoke-Build.ps1`
+6. Commit and push: `git push origin feature/my-new-function`
+7. Create a pull request
 
-### 1. Branch erstellen
+## Prerequisites
 
-```powershell
-git checkout -b feature/neue-funktion
-```
-
-### 2. Code schreiben
-
-- Verwende **approved verbs** (`Get-Verb`) für Funktionsnamen
-- Alle Funktionen erhalten `[CmdletBinding()]` und `[Parameter()]` Attribute
-- Passwörter immer als `[PSCredential]`, nie als `[string]`
-- Ändernde Funktionen unterstützen `-WhatIf` und `-Confirm`
-- Strukturierte Objekte (`[PSCustomObject]`) als Ausgabe, nie `Format-Table` in Funktionen
-- Verbindungen in `finally`-Blöcken trennen
-- Comment-Based Help für jede Public-Funktion
-
-### 3. Qualitätssicherung vor Commit
+- PowerShell 7.4 or newer
+- PowerCLI 13.2.0 or newer
+- Pester 5.0 or newer
+- PSScriptAnalyzer
 
 ```powershell
-# PSScriptAnalyzer ausführen
-Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
-
-# Pester-Tests ausführen
-./scripts/Invoke-Build.ps1
+Install-Module VMware.PowerCLI -Scope CurrentUser
+Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser
+Install-Module PSScriptAnalyzer -Scope CurrentUser
 ```
 
-**Es dürfen keine Errors oder Warnings von PSScriptAnalyzer zurückbleiben.**
+## Coding Standards
 
-### 4. Tests schreiben
+All contributions must follow the standards defined in [AGENTS.md](AGENTS.md).
 
-Für jede neue Funktion:
+### Key Rules
 
-- Unit-Tests im Ordner `tests/Unit/`
-- Mock alle PowerCLI-Cmdlets
-- Teste Edge-Cases (null, leer, Fehler)
+1. **`#Requires -Version 7.4`** at the top of every `.ps1` file
+2. **`[CmdletBinding()]`** for all public functions
+3. **Approved verb-noun names** (verify with `Get-Verb`)
+4. **Complete comment-based help** (SYNOPSIS, DESCRIPTION, PARAMETER, EXAMPLE, INPUTS, OUTPUTS, NOTES, LINK)
+5. **Parameter validation** (`[ValidateNotNullOrEmpty()]`, etc.)
+6. **Structured result objects** with `PSTypeName`, `VIServer`, `Timestamp`, `RunId`
+7. **Explicit `-Server`** to all PowerCLI cmdlets
+8. **No hardcoded credentials** – use `PSCredential` and `SecretManagement`
+9. **No `Invoke-Expression`** – forbidden
+10. **No `Format-Table`/`Format-List`** in business logic
+11. **Pester 5 tests** for all functions
+12. **Code coverage ≥ 80%**
 
-### 5. Pull Request
+### Read-only vs. Modifying
 
-- Beschreibe was geändert wurde und warum
-- Verlinke relevante Issues
-- CI-Pipeline muss grün sein (PSScriptAnalyzer + Pester)
+- **Read-only (Get-*)**: No `SupportsShouldProcess`
+- **Modifying (Set-, New-, Remove-)**: `SupportsShouldProcess` + `ConfirmImpact='High'` + prechecks + postchecks + before/after values + idempotent
 
-## Qualitätsregeln (verbindlich)
+## Creating a New Function
 
-1. Keine fest codierten Zugangsdaten oder Servernamen
-2. Ändernde Funktionen unterstützen `-WhatIf` und `-Confirm`
-3. Standardmäßig erfolgen nur Leseoperationen
-4. Jede Änderung hat Prechecks und eine nachvollziehbare Ergebnisprüfung
-5. Alle Funktionen liefern strukturierte Objekte
-6. Keine Aliase wie `%`, `?`, `gwmi` oder `select` im produktiven Code
-7. PowerCLI-Verbindungen werden in `finally` geschlossen
-8. Fehler werden nicht mit `SilentlyContinue` verborgen
-9. Jede öffentliche Funktion hat vollständige Hilfe und Beispiele
-10. PSScriptAnalyzer darf keine Fehler oder Warnungen melden
-11. Kritische Funktionen besitzen Pester-Tests
-12. Änderungen durchlaufen Pull Request und Vier-Augen-Prüfung
-13. Module und Abhängigkeiten werden auf feste Versionen eingeschränkt
-14. Produktions-, Test- und Entwicklungs-vCenter werden getrennt konfiguriert
-15. Jeder Lauf erzeugt ein maschinenlesbares Audit-Ergebnis
+### Automatic (recommended)
 
-## Modul-Struktur
-
-```
-src/ps-script-machine/
-├── Public/          # Öffentliche Funktionen (Cmdlets)
-├── Private/         # Interne Hilfsfunktionen
-├── ps-script-machine.psd1  # Modul-Manifest
-└── ps-script-machine.psm1  # Modul-Loader
+```powershell
+.\scripts\New-PowerCLITool.ps1 -FunctionName 'Get-VMHostDetail' -Type ReadOnly -Synopsis 'Retrieves detailed VMHost information'
 ```
 
-- **Public-Funktionen** sind die Cmdlets, die Administratoren verwenden
-- **Private-Funktionen** enthalten gemeinsame Verbindungs-, Logging-, Export- und Validierungslogik
-- Skripte in `scripts/` sollten nur Wrapper um das Modul sein
+### Manual
+
+1. Copy the appropriate template from `templates/`
+2. Place the function in `src/ps-script-machine/Public/` or `Private/`
+3. Create a test in `tests/Unit/` using `templates/PesterTest.Tests.ps1`
+4. Run `.\scripts\Invoke-Build.ps1`
+5. Update `README.md` and `CHANGELOG.md`
+
+## Testing
+
+### Unit Tests
+
+All unit tests go in `tests/Unit/` and must:
+- Use Pester 5 syntax
+- Mock all PowerCLI cmdlets
+- Cover: success, invalid params, empty results, unreachable vCenter, multiple vCenters, partial failures, result structure
+- Achieve ≥ 80% code coverage
+
+### Integration Tests
+
+Integration tests in `tests/Integration/` are:
+- Disabled by default
+- Activated via `$env:PS_SCRIPT_MACHINE_INTEGRATION_TESTS = 'true'`
+- Only run against test/lab environments
+- Never run against production
+
+## Build Process
+
+```powershell
+# Full build
+.\scripts\Invoke-Build.ps1
+
+# Individual tasks
+.\scripts\Invoke-Build.ps1 -Task Analyze
+.\scripts\Invoke-Build.ps1 -Task Test
+.\scripts\Invoke-Build.ps1 -Task Coverage
+```
+
+The build runs:
+1. Module manifest validation
+2. PSScriptAnalyzer
+3. Pester unit tests
+4. Code coverage
+5. Documentation check
+6. Module build
+7. Secret scan
+
+Any failure causes the build to fail.
+
+## Pull Request Process
+
+1. Ensure the build passes locally
+2. Update `CHANGELOG.md`
+3. Update `README.md` if needed
+4. Complete the PR template checklist
+5. Request review
+
+### PR Checklist
+
+- [ ] Code follows project standards (AGENTS.md)
+- [ ] PSScriptAnalyzer passes
+- [ ] All tests pass
+- [ ] Code coverage ≥ 80%
+- [ ] No hardcoded credentials
+- [ ] No `Invoke-Expression`
+- [ ] Documentation updated
+- [ ] CHANGELOG updated
+
+## Code Review
+
+See [docs/CODE_REVIEW_CHECKLIST.md](docs/CODE_REVIEW_CHECKLIST.md) for the complete code review checklist.
+
+## Definition of Done
+
+See [docs/DEFINITION_OF_DONE.md](docs/DEFINITION_OF_DONE.md) for the complete Definition of Done.
+
+## Questions?
+
+Open an issue with the `question` label.

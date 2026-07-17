@@ -1,35 +1,65 @@
-# Temporäre Dateien
-*.tmp
-*.temp
-.tmp_*
-
-# PowerShell-Ausgaben
-*.csv
-*.xlsx
-*.xls
+# Build output
+build/
+build/output/
 *.log
-*.txt
-!README.txt
 
-# Credentials & Secrets
-*.psd1.bak
+# PowerShell module build artifacts
+*.dll
+*.pdb
+
+# Test results
+TestResults.xml
+coverage.xml
+coverage-report/
+
+# Pester output
+*-PesterResults.xml
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Secret/credential files - NEVER commit these!
 *.pfx
+*.p12
 *.key
 *.pem
-*.cert
-Vault/
-secrets/
+secrets.json
+secrets.psd1
+credentials.json
+.env
+.env.local
+.env.*.local
 
-# VSCode
-.vscode/*.local
+# SecretManagement vault data
+*.vault
 
-# Test-Artefakte
-TestResults/
-Coverage/
-*.coverage
-*.xml.bak
+# Configuration files with real values (only examples are committed)
+config/environments.psd1
+config/settings.json
+config/secrets.json
 
-# OS-Dateien
-Thumbs.db
-desktop.ini
-.DS_Store
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Published modules
+Modules/
+PSModules/

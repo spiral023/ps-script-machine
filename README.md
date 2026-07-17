@@ -1,113 +1,269 @@
 # ps-script-machine
 
-PowerShell-Modul und Skripte für die VMware-Administration mit PowerCLI.
+> **Professional development platform and template for coding agents that create high-quality PowerShell and PowerCLI scripts for VMware vSphere administrators.**
 
-## Übersicht
+[![CI](https://github.com/spiral023/ps-script-machine/actions/workflows/ci.yml/badge.svg)](https://github.com/spiral023/ps-script-machine/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PowerShell 7.4+](https://img.shields.io/badge/PowerShell-7.4%2B-blue.svg)](https://docs.microsoft.com/en-us/powershell/)
+[![PowerCLI 13.2+](https://img.shields.io/badge/PowerCLI-13.2%2B-blue.svg)](https://developer.vmware.com/powercli)
 
-Dieses Repository enthält ein strukturiertes PowerShell-Modul mit Public/Private Functions für die VMware vSphere-Automatisierung. Die Skripte nutzen **VMware PowerCLI** (bzw. **VCF PowerCLI**).
+## Purpose
 
-## Architektur
+This repository provides:
+
+- A **PowerShell module** with reusable PowerCLI functions for VMware vSphere
+- **Templates** for creating new functions and scripts
+- **Quality assurance** via PSScriptAnalyzer, Pester tests, and code coverage
+- **Agent instructions** (AGENTS.md, CLAUDE.md, copilot-instructions.md) for coding agents
+- **Automated build process** that works identically locally and in CI
+- **Security standards** to prevent hardcoded credentials and unsafe constructs
+
+## Target Audience
+
+- **VMware vSphere administrators** automating with PowerCLI
+- **DevOps engineers** building PowerShell automation pipelines
+- **Coding agents** (Claude, Copilot, etc.) generating PowerShell/PowerCLI code
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture overview.
 
 ```
-ps-script-machine/
-├── .agents/skills/vmware-powercli-scripts/  # Agent Skill (Best Practices)
-├── .github/workflows/ci.yml                 # CI Pipeline
-├── .vscode/                                  # Editor-Konfiguration
-├── config/                                   # Konfigurations-Beispiele
-├── scripts/                                  # Wrapper-Skripte
-│   ├── Export-CdpInformation.ps1             # CDP-Export (Wrapper)
-│   └── Invoke-Build.ps1                      # Build & Test
-├── src/ps-script-machine/                    # PowerShell-Modul
-│   ├── Public/                               # Exportierte Cmdlets
-│   │   └── Get-VMHostNetworkInfo.ps1
-│   ├── Private/                              # Interne Hilfsfunktionen
-│   │   ├── Connect-VIServerSession.ps1
-│   │   ├── Disconnect-VIServerSession.ps1
-│   │   ├── ConvertTo-CleanText.ps1
-│   │   ├── Write-ScriptLog.ps1
-│   │   ├── Export-ReportCsv.ps1
-│   │   └── Export-ReportJson.ps1
-│   ├── ps-script-machine.psd1                # Modul-Manifest
-│   └── ps-script-machine.psm1                # Modul-Loader
-├── tests/                                    # Pester-Tests
-├── PSScriptAnalyzerSettings.psd1             # Analyzer-Konfiguration
-├── CHANGELOG.md
-├── CONTRIBUTING.md
-├── LICENSE
-└── README.md
+src/ps-script-machine/
+├── Public/           # Exported functions (Get-CdpNetworkInfo, Export-ModuleData)
+├── Private/          # Internal helpers (Connect-VIServerSession, Write-ModuleLog)
+├── Classes/          # PowerShell classes (optional)
+├── ps-script-machine.psd1  # Module manifest
+└── ps-script-machine.psm1  # Root module
+
+scripts/              # Wrapper scripts and build tools
+tests/                # Pester 5 tests (Unit, Integration, Acceptance)
+templates/            # Function and script templates
+config/               # Example configurations
+docs/                 # Architecture documentation
+build/                # Build output (gitignored)
+.github/              # CI/CD, issue templates, PR template
 ```
 
-## Verwendung
+## Prerequisites
 
-### Modul importieren
+| Component | Version |
+|-----------|---------|
+| PowerShell | 7.4 or newer |
+| PowerCLI | 13.2.0 or newer |
+| Pester | 5.0 or newer |
+| PSScriptAnalyzer | latest |
+| vCenter | 7.0, 8.0 |
+| ESXi | 7.0, 8.0 |
+
+## Installation
+
+### From source
 
 ```powershell
+git clone https://github.com/spiral023/ps-script-machine.git
+cd ps-script-machine
+
+# Import the module
 Import-Module .\src\ps-script-machine\ps-script-machine.psd1
+
+# Verify
+Get-Command -Module ps-script-machine
 ```
 
-### CDP-Informationen abfragen
+### Install dependencies
 
 ```powershell
-# Interaktiv (Wrapper-Skript):
-.\scripts\Export-CdpInformation.ps1
+# PowerCLI
+Install-Module VMware.PowerCLI -Scope CurrentUser
 
-# Parametrisiert (Funktion direkt):
-$cred = Get-Credential -Message "vCenter-Anmeldung"
-$results = Get-VMHostNetworkInfo -Server "vcenter.local" -Credential $cred
+# Pester
+Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser
 
-# Ergebnisse weiterverarbeiten:
-$results | Export-ReportCsv -Path "C:\Reports\cdp.csv"
-$results | Export-ReportJson -Path "C:\Reports\cdp.json"
-$results | Format-Table
+# PSScriptAnalyzer
+Install-Module PSScriptAnalyzer -Scope CurrentUser
 ```
 
-### Build & Tests
+## Local Development Workflow
 
 ```powershell
-./scripts/Invoke-Build.ps1              # Analyse + Tests
-./scripts/Invoke-Build.ps1 -Coverage    # Mit Code-Coverage
-./scripts/Invoke-Build.ps1 -SkipAnalysis # Nur Tests
+# 1. Make changes to functions in src/ps-script-machine/
+
+# 2. Run the full build (manifest, analyzer, tests, coverage, docs, build, secrets)
+.\scripts\Invoke-Build.ps1
+
+# 3. Or run individual tasks
+.\scripts\Invoke-Build.ps1 -Task Analyze    # PSScriptAnalyzer only
+.\scripts\Invoke-Build.ps1 -Task Test       # Pester tests only
+.\scripts\Invoke-Build.ps1 -Task Coverage   # Code coverage only
+
+# 4. With custom coverage threshold
+.\scripts\Invoke-Build.ps1 -CodeCoverageThreshold 90
 ```
 
-## Qualitätssicherung
+## Usage by Coding Agents
 
-- **PSScriptAnalyzer** – Statische Code-Analyse (`PSScriptAnalyzerSettings.psd1`)
-- **Pester** – Unit-Tests mit Mocking (`tests/`)
-- **GitHub Actions CI** – Automatische Pipeline bei Push/PR
-- **Agent Skill** – Best Practices Guide (`.agents/skills/`)
+Coding agents should read `AGENTS.md` for the central rule base.
 
-## Voraussetzungen
+### Creating a new function
 
-- **PowerShell 7.4+** (`pwsh`)
-- **VMware PowerCLI** / **VCF PowerCLI 9.1+**:
-  ```powershell
-  Install-Module VMware.PowerCLI -Scope CurrentUser
-  ```
-- **PSScriptAnalyzer**:
-  ```powershell
-  Install-Module PSScriptAnalyzer -Scope CurrentUser
-  ```
-- **Pester 5+**:
-  ```powershell
-  Install-Module Pester -Scope CurrentUser -MinimumVersion 5.0
-  ```
+**Automatic (recommended):**
 
-## Agent Skill
+```powershell
+.\scripts\New-PowerCLITool.ps1 -FunctionName 'Get-VMHostDetail' -Type ReadOnly -Synopsis 'Retrieves detailed VMHost information'
+```
 
-Der Skill `vmware-powercli-scripts` im Ordner `.agents/skills/` enthält 30+ Best-Practice-Regeln in 11 Kategorien:
+This generates:
+- `src/ps-script-machine/Public/Get-VMHostDetail.ps1`
+- `tests/Unit/Get-VMHostDetail.Tests.ps1`
+- `docs/Get-VMHostDetail.md`
 
-1. **Security & Credentials** (CRITICAL)
-2. **Error Handling & Robustness** (CRITICAL)
-3. **PowerCLI Connection Management** (HIGH)
-4. **vSphere API & Data Retrieval** (HIGH)
-5. **PowerShell Code Quality** (MEDIUM-HIGH)
-6. **Testing with Pester** (MEDIUM)
-7. **Output & Formatting** (MEDIUM)
-8. **Documentation & Help** (LOW-MEDIUM)
-9. **State-Changing Operations** (CRITICAL) – `-WhatIf`, Read-Only by Default, Test-Get-Invoke
-10. **Secret Management** (HIGH) – Microsoft.SecretManagement
-11. **Modular Architecture** (MEDIUM-HIGH) – Public/Private, Scripts as Wrappers
+**Manual:**
 
-## Lizenz
+1. Copy `templates/PublicFunction.ps1` (read-only) or `templates/ChangeScript.ps1` (modifying)
+2. Place in `src/ps-script-machine/Public/`
+3. Create test in `tests/Unit/` using `templates/PesterTest.Tests.ps1`
+4. Run `.\scripts\Invoke-Build.ps1`
+5. Update README and CHANGELOG
 
-MIT – siehe [LICENSE](LICENSE).
+### Example: Using the module
+
+```powershell
+# Import module
+Import-Module .\src\ps-script-machine\ps-script-machine.psd1
+
+# Get credentials (never hardcode!)
+$cred = Get-Credential
+
+# Connect to vCenter
+$session = Connect-VIServerSession -Server 'vcenter.example.com' -Credential $cred
+
+# Retrieve CDP network information
+$cdpInfo = Get-CdpNetworkInfo -VIServer $session
+
+# Export to CSV and JSON
+$exportedFiles = Export-ModuleData -Data $cdpInfo -OutputPath 'C:\Exports\cdp-info' -Format CSV, JSON -Force
+
+# Disconnect
+Disconnect-VIServer -Server $session -Confirm:$false
+```
+
+## Test and Build Commands
+
+```powershell
+# Full build
+.\scripts\Invoke-Build.ps1
+
+# Individual tasks
+.\scripts\Invoke-Build.ps1 -Task Manifest    # Validate manifest
+.\scripts\Invoke-Build.ps1 -Task Analyze     # PSScriptAnalyzer
+.\scripts\Invoke-Build.ps1 -Task Test        # Pester unit tests
+.\scripts\Invoke-Build.ps1 -Task Coverage    # Code coverage
+.\scripts\Invoke-Build.ps1 -Task Docs        # Documentation check
+.\scripts\Invoke-Build.ps1 -Task Build       # Module build
+.\scripts\Invoke-Build.ps1 -Task Secrets     # Secret scan
+
+# Integration tests (requires explicit activation)
+$env:PS_SCRIPT_MACHINE_INTEGRATION_TESTS = 'true'
+$env:PS_SCRIPT_MACHINE_VCENTER = 'vcenter.test.local'
+Invoke-Pester -Path tests/Integration/
+```
+
+## Security Model
+
+See [SECURITY.md](SECURITY.md) for the full security policy.
+
+Key principles:
+- **No hardcoded credentials** – Use `PSCredential` and `SecretManagement`
+- **No `Invoke-Expression`** – Forbidden
+- **No plaintext passwords** – Never in code or logs
+- **Input validation** – All parameters validated
+- **Least privilege** – Minimal vCenter permissions
+
+### Using SecretManagement
+
+```powershell
+# Install SecretManagement modules
+Install-Module Microsoft.PowerShell.SecretManagement -Scope CurrentUser
+Install-Module Microsoft.PowerShell.SecretStore -Scope CurrentUser
+
+# Register a vault
+Register-SecretVault -Name 'MyVault' -ModuleName 'Microsoft.PowerShell.SecretStore'
+
+# Store a credential
+$cred = Get-Credential
+Set-Secret -Name 'vcenter-prod' -Secret $cred -Vault 'MyVault'
+
+# Use in scripts
+$cred = Get-Secret -Name 'vcenter-prod' -Vault 'MyVault'
+$session = Connect-VIServerSession -Server 'vcenter.example.com' -Credential $cred
+```
+
+## VMware Permissions
+
+### Get-CdpNetworkInfo
+
+| Permission | Scope |
+|-----------|-------|
+| System.Read | vCenter Server |
+| Host.Config.Network | ESXi hosts or host folder |
+
+### Least Privilege Recommendation
+
+Create a dedicated vCenter role with only the required permissions:
+1. Go to vCenter → Administration → Roles
+2. Create a new role (e.g., "ps-script-machine-readonly")
+3. Add only: `System.Read`, `Host.Config.Network`
+4. Assign this role to the service account
+
+## Logging
+
+The module provides structured JSON logging via `Write-ModuleLog`:
+
+```powershell
+# Console logging
+Write-ModuleLog -Message "Starting operation" -Level Information -VIServer 'vcenter01'
+
+# File logging
+Write-ModuleLog -Message "Operation completed" -Level Information -VIServer 'vcenter01' -LogFile 'C:\Logs\module.log'
+```
+
+Log entries include:
+- Timestamp (UTC ISO 8601)
+- Level (Information, Warning, Error, Debug)
+- RunId (unique per module import)
+- VIServer (target vCenter)
+- Resource (affected resource)
+- Message
+- Optional Data
+
+## Versioning
+
+This project follows [Semantic Versioning](https://semver.org/):
+- **MAJOR**: Breaking changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes (backward compatible)
+
+## Release Process
+
+1. Update `CHANGELOG.md` with the new version and changes
+2. Update the module version in `src/ps-script-machine/ps-script-machine.psd1`
+3. Create a git tag: `git tag -a v1.0.0 -m "Release v1.0.0"`
+4. Push the tag: `git push origin v1.0.0`
+5. GitHub Actions will create the release automatically
+
+## Known Limitations
+
+- **PowerCLI required**: The module requires VMware.PowerCLI to be installed
+- **vCenter 7.0/8.0 only**: Older vCenter versions are not supported
+- **Windows-focused**: While PowerShell 7.4 is cross-platform, PowerCLI has Windows-specific features
+- **No PS Gallery publication**: The module is installed from source
+- **Integration tests require lab environment**: Cannot run against production
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
+## License
+
+This project is licensed under the MIT License – see [LICENSE](LICENSE) for details.

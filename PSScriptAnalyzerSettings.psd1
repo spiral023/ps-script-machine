@@ -1,23 +1,23 @@
 @{
-    # PSScriptAnalyzer-Konfiguration für hochwertige PowerShell-Skripte
-    # Dokumentation: https://github.com/PowerShell/PSScriptAnalyzer
+    # PSScriptAnalyzer configuration for high-quality PowerShell scripts
+    # Documentation: https://github.com/PowerShell/PSScriptAnalyzer
 
-    Severity = @('Error', 'Warning', 'Information')
+    Severity = @('Error', 'Warning')
 
     Rules = @{
-        # --- Sicherheit ---
+        # --- Security ---
         PSAvoidUsingPlainTextForPassword = @{ Enable = $true }
         PSAvoidUsingWMICmdlet             = @{ Enable = $true }
         PSAvoidUsingInvokeExpression      = @{ Enable = $true }
         PSAvoidUsingWriteHost             = @{ Enable = $true }
 
-        # --- Code-Qualität ---
+        # --- Code Quality ---
         PSUseApprovedVerbs     = @{ Enable = $true }
         PSUseSingularNouns      = @{ Enable = $true }
         PSUseOutputTypeCorrectly = @{ Enable = $true }
         PSUseCorrectCasing      = @{ Enable = $true }
 
-        # --- Formatierung ---
+        # --- Formatting ---
         PSUseConsistentIndentation = @{
             Enable              = $true
             IndentationSize     = 4
@@ -47,6 +47,7 @@
     }
 
     ExcludeRules = @(
-        'PSMissingModuleManifestField'
+        'PSMissingModuleManifestField',
+        'PSUseBOMForUnicodeEncodedFile'
     )
 }

@@ -33,6 +33,9 @@
     $results | Export-ReportCsv -Path "C:\Reports\cdp.csv"
     $results | Export-ReportJson -Path "C:\Reports\cdp.json"
 
+.OUTPUTS
+    PSCustomObject - Strukturierte CDP-Netzwerkinformationen pro physischem Adapter.
+
 .NOTES
     Author: VMware Admin Team
     Requirements: VMware PowerCLI 12+ / VCF PowerCLI 9+
@@ -162,6 +165,15 @@ function Get-VMHostNetworkInfo {
 
                     $cdpAvailable = $null -ne $cdp
 
+                    $cdpDeviceId = if ($cdpAvailable) { ConvertTo-CleanText $cdp.DevId } else { "" }
+                    $cdpPortId = if ($cdpAvailable) { ConvertTo-CleanText $cdp.PortId } else { "" }
+                    $cdpMgmtAddr = if ($cdpAvailable) { ConvertTo-CleanText $cdp.MgmtAddr } else { "" }
+                    $cdpAddress = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Address } else { "" }
+                    $cdpHardwarePlatform = if ($cdpAvailable) { ConvertTo-CleanText $cdp.HardwarePlatform } else { "" }
+                    $cdpSoftwareVersion = if ($cdpAvailable) { ConvertTo-CleanText $cdp.SoftwareVersion } else { "" }
+                    $cdpVlan = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Vlan } else { "" }
+                    $cdpMtu = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Mtu } else { "" }
+
                     $results.Add([PSCustomObject]@{
                         vCenter             = $Server
                         Cluster             = $clusterName
@@ -170,14 +182,14 @@ function Get-VMHostNetworkInfo {
                         PhysicalAdapter     = $adapter.Name
                         LinkStatus          = if ($adapter.BitRatePerSec -gt 0) { "Up" } else { "Down" }
                         MACAddress          = $adapter.Mac
-                        CDPDeviceID         = ConvertTo-CleanText $cdp.DevId
-                        CDPPortID           = ConvertTo-CleanText $cdp.PortId
-                        CDPManagementIP     = ConvertTo-CleanText $cdp.MgmtAddr
-                        CDPSwitchAddress    = ConvertTo-CleanText $cdp.Address
-                        CDPHardwarePlatform = ConvertTo-CleanText $cdp.HardwarePlatform
-                        CDPSoftwareVersion  = ConvertTo-CleanText $cdp.SoftwareVersion
-                        CDPNativeVLAN       = ConvertTo-CleanText $cdp.Vlan
-                        CDPMTU              = ConvertTo-CleanText $cdp.Mtu
+                        CDPDeviceID         = $cdpDeviceId
+                        CDPPortID           = $cdpPortId
+                        CDPManagementIP     = $cdpMgmtAddr
+                        CDPSwitchAddress    = $cdpAddress
+                        CDPHardwarePlatform = $cdpHardwarePlatform
+                        CDPSoftwareVersion  = $cdpSoftwareVersion
+                        CDPNativeVLAN       = $cdpVlan
+                        CDPMTU              = $cdpMtu
                         CDPAvailable        = $cdpAvailable
                         QueryStatus         = if ($cdpAvailable) { "CDP-Daten gefunden" } else { "Keine CDP-Daten" }
                         ErrorMessage        = ""
