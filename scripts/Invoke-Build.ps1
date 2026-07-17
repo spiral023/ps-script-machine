@@ -19,7 +19,12 @@
     7. Secret scan (check for accidentally committed secrets)
     8. Agent compliance check
 
-    Any failure in steps 1-8 causes the build to fail.
+    Tasks run in the order above. If a task fails, no further tasks are
+    attempted - but a full summary is always printed at the end, showing
+    every requested task as Passed, Failed, or Not Run. This makes it
+    immediately clear (in CI logs and to coding agents) which gate failed
+    and which later gates were never reached, rather than ending on a bare
+    exception with no summary at all.
 
 .PARAMETER Task
     The build task to run. If not specified, all tasks are run.
@@ -88,30 +93,14 @@ $testsPath = Join-Path $repoRoot 'tests'
 $analyzerSettings = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 
 $runAll = $Task -contains 'All'
-$results = [ordered]@{}
 
-function Invoke-BuildTask {
-    param([string]$Name, [scriptblock]$Action)
-    Write-Host "`n=== Running: $Name ===" -ForegroundColor Cyan
-    $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
-    try {
-        & $Action
-        $stopWatch.Stop()
-        $results[$Name] = [ordered]@{ Status = 'Passed'; Duration = $stopWatch.Elapsed.TotalSeconds }
-        Write-Host "PASSED: $Name ($($stopWatch.Elapsed.TotalSeconds)s)`n" -ForegroundColor Green
-    }
-    catch {
-        $stopWatch.Stop()
-        $results[$Name] = [ordered]@{ Status = 'Failed'; Duration = $stopWatch.Elapsed.TotalSeconds; Error = $_.Exception.Message }
-        Write-Host "FAILED: $Name ($($stopWatch.Elapsed.TotalSeconds)s)" -ForegroundColor Red
-        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
-        throw
-    }
-}
+# Canonical task order. A task's position here also defines its place in
+# the fail-fast sequence below: once any task fails, every task after it
+# in this list is skipped and reported as 'Not Run'.
+$taskOrder = @('Manifest', 'Analyze', 'Test', 'Coverage', 'Docs', 'Build', 'Secrets', 'Compliance')
 
-# Task 1: Manifest validation
-if ($runAll -or $Task -contains 'Manifest') {
-    Invoke-BuildTask -Name 'Manifest' -Action {
+$taskActions = [ordered]@{
+    Manifest = {
         Write-Host "Validating module manifest..."
         $manifest = Test-ModuleManifest -Path $modulePath -ErrorAction Stop
         Write-Host "  Module: $($manifest.Name) v$($manifest.Version)"
@@ -135,11 +124,8 @@ if ($runAll -or $Task -contains 'Manifest') {
             }
         }
     }
-}
 
-# Task 2: PSScriptAnalyzer
-if ($runAll -or $Task -contains 'Analyze') {
-    Invoke-BuildTask -Name 'Analyze' -Action {
+    Analyze = {
         Write-Host "Running PSScriptAnalyzer..."
         if (-not (Get-Module -ListAvailable -Name 'PSScriptAnalyzer' -ErrorAction SilentlyContinue)) {
             Write-Host "  PSScriptAnalyzer not installed. Installing..."
@@ -168,11 +154,8 @@ if ($runAll -or $Task -contains 'Analyze') {
             Write-Host "  No issues found."
         }
     }
-}
 
-# Task 3: Pester unit tests
-if ($runAll -or $Task -contains 'Test') {
-    Invoke-BuildTask -Name 'Test' -Action {
+    Test = {
         Write-Host "Running Pester unit tests..."
         # Ensure Pester 5 is used (not Pester 6 which has breaking changes)
         $pester5 = Get-Module -ListAvailable -Name 'Pester' -ErrorAction SilentlyContinue |
@@ -214,11 +197,8 @@ if ($runAll -or $Task -contains 'Test') {
         Write-Host "  Failed: $($pesterResult.FailedCount)"
         Write-Host "  Skipped: $($pesterResult.SkippedCount)"
     }
-}
 
-# Task 4: Code coverage
-if ($runAll -or $Task -contains 'Coverage') {
-    Invoke-BuildTask -Name 'Coverage' -Action {
+    Coverage = {
         Write-Host "Running code coverage analysis..."
         $unitTestPath = Join-Path $testsPath 'Unit'
         $coveragePaths = @(
@@ -281,11 +261,8 @@ if ($runAll -or $Task -contains 'Coverage') {
 
         Write-Host "  Coverage check passed."
     }
-}
 
-# Task 5: Documentation check
-if ($runAll -or $Task -contains 'Docs') {
-    Invoke-BuildTask -Name 'Docs' -Action {
+    Docs = {
         Write-Host "Checking documentation..."
         $publicFunctions = Get-ChildItem -Path (Join-Path $srcPath 'ps-script-machine\Public\*.ps1') -ErrorAction SilentlyContinue
         foreach ($file in $publicFunctions) {
@@ -313,11 +290,8 @@ if ($runAll -or $Task -contains 'Docs') {
             Write-Host "  $($file.Name): OK"
         }
     }
-}
 
-# Task 6: Module build
-if ($runAll -or $Task -contains 'Build') {
-    Invoke-BuildTask -Name 'Build' -Action {
+    Build = {
         Write-Host "Building module..."
         if (-not (Test-Path $OutputPath)) {
             New-Item -Path $OutputPath -ItemType Directory -Force | Out-Null
@@ -333,23 +307,29 @@ if ($runAll -or $Task -contains 'Build') {
         Test-ModuleManifest -Path $builtManifest -ErrorAction Stop | Out-Null
         Write-Host "  Built module manifest is valid."
     }
-}
 
-# Task 7: Secret scan
-if ($runAll -or $Task -contains 'Secrets') {
-    Invoke-BuildTask -Name 'Secrets' -Action {
+    Secrets = {
         Write-Host "Scanning for accidentally committed secrets..."
-        # Exclude test files, build output, and documentation files that contain
-        # anti-pattern examples (AGENTS.md, CLAUDE.md) from secret scanning.
-        # Test files use mock credentials that are not real secrets.
-        $allFiles = Get-ChildItem -Path $repoRoot -Recurse -Include '*.ps1','*.psm1','*.psd1','*.json','*.md' -ErrorAction SilentlyContinue |
+        # Scan the entire repository, including tests/, docs/, AGENTS.md and
+        # CLAUDE.md - a real secret pasted into a test fixture or into agent
+        # instructions is exactly as dangerous as one in src/. Only the
+        # generated build/output/ directory is excluded, because it is a
+        # verbatim copy of src/ (already scanned) recreated on every build.
+        #
+        # Intentional, non-secret example values (documented anti-pattern
+        # code samples, redaction-test fixtures) are allowlisted ONLY via an
+        # explicit, narrow, per-line marker comment: `secret-scan:ignore`.
+        # This replaces a previous loose heuristic (skip any line containing
+        # the word "example", "Get-Credential", or "ConvertTo-SecureString"
+        # anywhere) that could both hide a real secret sitting next to one of
+        # those words and was not auditable - the marker makes every allowed
+        # exception explicit, greppable, and reviewable in a diff.
+        $allowlistMarker = 'secret-scan:ignore'
+        $allFiles = Get-ChildItem -Path $repoRoot -Recurse -Include '*.ps1', '*.psm1', '*.psd1', '*.json', '*.md' -ErrorAction SilentlyContinue |
             Where-Object {
                 $_.FullName -notmatch '\\\.git\\' -and
                 $_.FullName -notmatch 'node_modules' -and
-                $_.FullName -notmatch '\\tests\\' -and
-                $_.FullName -notmatch '\\build\\' -and
-                $_.Name -ne 'AGENTS.md' -and
-                $_.Name -ne 'CLAUDE.md'
+                $_.FullName -notmatch '\\build\\'
             }
         $secretPatterns = @(
             '(?i)password\s*=\s*[''"][^''"]{4,}[''"]',
@@ -363,14 +343,13 @@ if ($runAll -or $Task -contains 'Secrets') {
             $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
             if (-not $content) { continue }
             foreach ($pattern in $secretPatterns) {
-                $matches = [regex]::Matches($content, $pattern)
-                if ($matches.Count -gt 0) {
-                    # Skip if it's in a comment or example
+                $patternMatches = [regex]::Matches($content, $pattern)
+                if ($patternMatches.Count -gt 0) {
                     $lines = $content -split "`n"
                     $lineNum = 0
                     foreach ($line in $lines) {
                         $lineNum++
-                        if ($line -match $pattern -and $line -notmatch '^\s*#' -and $line -notmatch 'example' -and $line -notmatch 'Get-Credential' -and $line -notmatch 'ConvertTo-SecureString') {
+                        if ($line -match $pattern -and $line -notmatch '^\s*#' -and $line -notmatch [regex]::Escape($allowlistMarker)) {
                             Write-Host "  POTENTIAL SECRET in $($file.Name):$lineNum - $line" -ForegroundColor Yellow
                             $found = $true
                         }
@@ -383,11 +362,8 @@ if ($runAll -or $Task -contains 'Secrets') {
         }
         Write-Host "  No secrets found."
     }
-}
 
-# Task 8: Agent compliance check
-if ($runAll -or $Task -contains 'Compliance') {
-    Invoke-BuildTask -Name 'Compliance' -Action {
+    Compliance = {
         Write-Host "Running agent compliance check..."
         $complianceScript = Join-Path $repoRoot 'scripts\Test-AgentCompliance.ps1'
         if (-not (Test-Path $complianceScript)) {
@@ -397,16 +373,72 @@ if ($runAll -or $Task -contains 'Compliance') {
     }
 }
 
-# Summary
-Write-Host "`n=== Build Summary ===" -ForegroundColor Cyan
-foreach ($key in $results.Keys) {
-    $status = $results[$key].Status
-    $color = if ($status -eq 'Passed') { 'Green' } else { 'Red' }
-    Write-Host "  $key`: $status ($($results[$key].Duration)s)" -ForegroundColor $color
-}
-Write-Host ""
+# Only the tasks actually requested (in canonical order) are attempted and
+# reported. Everything else in $taskOrder is irrelevant to this run.
+$requestedTasks = if ($runAll) { $taskOrder } else { $taskOrder | Where-Object { $Task -contains $_ } }
 
-$failed = $results.Values | Where-Object { $_.Status -eq 'Failed' }
-if ($failed) {
+$results = [ordered]@{}
+foreach ($name in $requestedTasks) {
+    $results[$name] = [ordered]@{ Status = 'Not Run'; Duration = 0.0; Error = $null }
+}
+
+$buildFailed = $false
+
+try {
+    foreach ($name in $requestedTasks) {
+        if ($buildFailed) {
+            # A prior task already failed: skip remaining tasks rather than
+            # run further gates against a build that is already known bad.
+            # The task stays 'Not Run' in $results and shows up as such in
+            # the summary below.
+            continue
+        }
+
+        Write-Host "`n=== Running: $name ===" -ForegroundColor Cyan
+        $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        try {
+            & $taskActions[$name]
+            $stopWatch.Stop()
+            $results[$name] = [ordered]@{ Status = 'Passed'; Duration = $stopWatch.Elapsed.TotalSeconds; Error = $null }
+            Write-Host "PASSED: $name ($($stopWatch.Elapsed.TotalSeconds)s)`n" -ForegroundColor Green
+        }
+        catch {
+            $stopWatch.Stop()
+            $results[$name] = [ordered]@{ Status = 'Failed'; Duration = $stopWatch.Elapsed.TotalSeconds; Error = $_.Exception.Message }
+            Write-Host "FAILED: $name ($($stopWatch.Elapsed.TotalSeconds)s)" -ForegroundColor Red
+            Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
+            $buildFailed = $true
+        }
+    }
+}
+finally {
+    # This summary always runs - even if a task above throws in a way that
+    # was not expected to be caught - so a coding agent or a human reading
+    # CI output can always see the full picture: what passed, what failed,
+    # and what was never reached because of that failure.
+    Write-Host "`n=== Build Summary ===" -ForegroundColor Cyan
+    foreach ($name in $requestedTasks) {
+        $status = $results[$name].Status
+        $color = switch ($status) {
+            'Passed' { 'Green' }
+            'Failed' { 'Red' }
+            default { 'DarkGray' }
+        }
+        $durationText = if ($results[$name].Duration -gt 0) {
+            " ($([math]::Round($results[$name].Duration, 2))s)"
+        }
+        else {
+            ''
+        }
+        Write-Host ("  {0,-14}{1}{2}" -f $name, $status.ToUpper(), $durationText) -ForegroundColor $color
+    }
+    Write-Host ""
+}
+
+if ($buildFailed) {
+    Write-Host "Build failed with exit code 1." -ForegroundColor Red
     exit 1
 }
+
+Write-Host "Build succeeded." -ForegroundColor Green
+exit 0

@@ -139,11 +139,17 @@ function Get-CdpNetworkInfo {
                                 $cdpInfo = $esxCli.network.nic.cdp.get($adapter.Name) | Select-Object -First 1 -ErrorAction SilentlyContinue
 
                                 # Extract the VIServer name - if it's a VIServer object, use .Name
-                $viserverName = if ($server -is [string]) { $server }
-                                elseif ($server.Name) { $server.Name }
-                                else { [string]$server }
+                                $viserverName = if ($server -is [string]) {
+                                    $server 
+                                }
+                                elseif ($server.Name) {
+                                    $server.Name 
+                                }
+                                else {
+                                    [string]$server 
+                                }
 
-                $result = [PSCustomObject]@{
+                                $result = [PSCustomObject]@{
                                     PSTypeName     = 'ps-script-machine.CdpNetworkInfo'
                                     VIServer       = $viserverName
                                     VMHost         = $hostName

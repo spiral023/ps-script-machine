@@ -76,8 +76,12 @@ function Get-VMHostNetworkInfo {
 
         # Hosts abfragen (gefiltert nach Cluster oder VMHost-Parameter)
         $vmHostParams = @{}
-        if ($VMHost) { $vmHostParams['Name'] = $VMHost }
-        if ($Cluster) { $vmHostParams['Location'] = (Get-Cluster -Name $Cluster) }
+        if ($VMHost) {
+            $vmHostParams['Name'] = $VMHost 
+        }
+        if ($Cluster) {
+            $vmHostParams['Location'] = (Get-Cluster -Name $Cluster) 
+        }
 
         $vmHosts = Get-VMHost @vmHostParams | Sort-Object Name
 
@@ -116,26 +120,26 @@ function Get-VMHostNetworkInfo {
             # Bei nicht erreichbaren Hosts überspringen
             if ($currentHost.ConnectionState -ne "Connected") {
                 $results.Add([PSCustomObject]@{
-                    vCenter             = $Server
-                    Cluster             = $clusterName
-                    VMHost              = $currentHost.Name
-                    HostConnectionState = $currentHost.ConnectionState
-                    PhysicalAdapter     = ""
-                    LinkStatus          = ""
-                    MACAddress          = ""
-                    CDPDeviceID         = ""
-                    CDPPortID           = ""
-                    CDPManagementIP     = ""
-                    CDPSwitchAddress    = ""
-                    CDPHardwarePlatform = ""
-                    CDPSoftwareVersion  = ""
-                    CDPNativeVLAN       = ""
-                    CDPMTU              = ""
-                    CDPAvailable        = $false
-                    QueryStatus         = "Übersprungen"
-                    ErrorMessage        = "ESXi-Host ist nicht verbunden."
-                    CollectionTime      = (Get-Date)
-                })
+                        vCenter             = $Server
+                        Cluster             = $clusterName
+                        VMHost              = $currentHost.Name
+                        HostConnectionState = $currentHost.ConnectionState
+                        PhysicalAdapter     = ""
+                        LinkStatus          = ""
+                        MACAddress          = ""
+                        CDPDeviceID         = ""
+                        CDPPortID           = ""
+                        CDPManagementIP     = ""
+                        CDPSwitchAddress    = ""
+                        CDPHardwarePlatform = ""
+                        CDPSoftwareVersion  = ""
+                        CDPNativeVLAN       = ""
+                        CDPMTU              = ""
+                        CDPAvailable        = $false
+                        QueryStatus         = "Übersprungen"
+                        ErrorMessage        = "ESXi-Host ist nicht verbunden."
+                        CollectionTime      = (Get-Date)
+                    })
 
                 Write-ScriptLog -Message "$($currentHost.Name) ist nicht verbunden, übersprungen." -Level WARNING
                 continue
@@ -165,36 +169,86 @@ function Get-VMHostNetworkInfo {
 
                     $cdpAvailable = $null -ne $cdp
 
-                    $cdpDeviceId = if ($cdpAvailable) { ConvertTo-CleanText $cdp.DevId } else { "" }
-                    $cdpPortId = if ($cdpAvailable) { ConvertTo-CleanText $cdp.PortId } else { "" }
-                    $cdpMgmtAddr = if ($cdpAvailable) { ConvertTo-CleanText $cdp.MgmtAddr } else { "" }
-                    $cdpAddress = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Address } else { "" }
-                    $cdpHardwarePlatform = if ($cdpAvailable) { ConvertTo-CleanText $cdp.HardwarePlatform } else { "" }
-                    $cdpSoftwareVersion = if ($cdpAvailable) { ConvertTo-CleanText $cdp.SoftwareVersion } else { "" }
-                    $cdpVlan = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Vlan } else { "" }
-                    $cdpMtu = if ($cdpAvailable) { ConvertTo-CleanText $cdp.Mtu } else { "" }
+                    $cdpDeviceId = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.DevId 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpPortId = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.PortId 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpMgmtAddr = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.MgmtAddr 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpAddress = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.Address 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpHardwarePlatform = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.HardwarePlatform 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpSoftwareVersion = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.SoftwareVersion 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpVlan = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.Vlan 
+                    }
+                    else {
+                        "" 
+                    }
+                    $cdpMtu = if ($cdpAvailable) {
+                        ConvertTo-CleanText $cdp.Mtu 
+                    }
+                    else {
+                        "" 
+                    }
 
                     $results.Add([PSCustomObject]@{
-                        vCenter             = $Server
-                        Cluster             = $clusterName
-                        VMHost              = $currentHost.Name
-                        HostConnectionState = $currentHost.ConnectionState
-                        PhysicalAdapter     = $adapter.Name
-                        LinkStatus          = if ($adapter.BitRatePerSec -gt 0) { "Up" } else { "Down" }
-                        MACAddress          = $adapter.Mac
-                        CDPDeviceID         = $cdpDeviceId
-                        CDPPortID           = $cdpPortId
-                        CDPManagementIP     = $cdpMgmtAddr
-                        CDPSwitchAddress    = $cdpAddress
-                        CDPHardwarePlatform = $cdpHardwarePlatform
-                        CDPSoftwareVersion  = $cdpSoftwareVersion
-                        CDPNativeVLAN       = $cdpVlan
-                        CDPMTU              = $cdpMtu
-                        CDPAvailable        = $cdpAvailable
-                        QueryStatus         = if ($cdpAvailable) { "CDP-Daten gefunden" } else { "Keine CDP-Daten" }
-                        ErrorMessage        = ""
-                        CollectionTime      = (Get-Date)
-                    })
+                            vCenter             = $Server
+                            Cluster             = $clusterName
+                            VMHost              = $currentHost.Name
+                            HostConnectionState = $currentHost.ConnectionState
+                            PhysicalAdapter     = $adapter.Name
+                            LinkStatus          = if ($adapter.BitRatePerSec -gt 0) {
+                                "Up" 
+                            }
+                            else {
+                                "Down" 
+                            }
+                            MACAddress          = $adapter.Mac
+                            CDPDeviceID         = $cdpDeviceId
+                            CDPPortID           = $cdpPortId
+                            CDPManagementIP     = $cdpMgmtAddr
+                            CDPSwitchAddress    = $cdpAddress
+                            CDPHardwarePlatform = $cdpHardwarePlatform
+                            CDPSoftwareVersion  = $cdpSoftwareVersion
+                            CDPNativeVLAN       = $cdpVlan
+                            CDPMTU              = $cdpMtu
+                            CDPAvailable        = $cdpAvailable
+                            QueryStatus         = if ($cdpAvailable) {
+                                "CDP-Daten gefunden" 
+                            }
+                            else {
+                                "Keine CDP-Daten" 
+                            }
+                            ErrorMessage        = ""
+                            CollectionTime      = (Get-Date)
+                        })
                 }
 
                 Write-ScriptLog -Message "  $($physicalAdapters.Count) physische Adapter ausgelesen." -Level INFO
@@ -203,26 +257,26 @@ function Get-VMHostNetworkInfo {
                 $errorMessage = $_.Exception.Message
 
                 $results.Add([PSCustomObject]@{
-                    vCenter             = $Server
-                    Cluster             = $clusterName
-                    VMHost              = $currentHost.Name
-                    HostConnectionState = $currentHost.ConnectionState
-                    PhysicalAdapter     = ""
-                    LinkStatus          = ""
-                    MACAddress          = ""
-                    CDPDeviceID         = ""
-                    CDPPortID           = ""
-                    CDPManagementIP     = ""
-                    CDPSwitchAddress    = ""
-                    CDPHardwarePlatform = ""
-                    CDPSoftwareVersion  = ""
-                    CDPNativeVLAN       = ""
-                    CDPMTU              = ""
-                    CDPAvailable        = $false
-                    QueryStatus         = "Fehler"
-                    ErrorMessage        = $errorMessage
-                    CollectionTime      = (Get-Date)
-                })
+                        vCenter             = $Server
+                        Cluster             = $clusterName
+                        VMHost              = $currentHost.Name
+                        HostConnectionState = $currentHost.ConnectionState
+                        PhysicalAdapter     = ""
+                        LinkStatus          = ""
+                        MACAddress          = ""
+                        CDPDeviceID         = ""
+                        CDPPortID           = ""
+                        CDPManagementIP     = ""
+                        CDPSwitchAddress    = ""
+                        CDPHardwarePlatform = ""
+                        CDPSoftwareVersion  = ""
+                        CDPNativeVLAN       = ""
+                        CDPMTU              = ""
+                        CDPAvailable        = $false
+                        QueryStatus         = "Fehler"
+                        ErrorMessage        = $errorMessage
+                        CollectionTime      = (Get-Date)
+                    })
 
                 Write-ScriptLog -Message "Abfrage für $($currentHost.Name) fehlgeschlagen: $errorMessage" -Level WARNING
             }

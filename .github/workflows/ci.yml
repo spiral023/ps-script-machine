@@ -42,145 +42,16 @@ jobs:
         run: |
           Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber -SkipPublisherCheck
 
-      - name: Validate module manifest
+      - name: Run build (all quality gates)
         shell: pwsh
         run: |
-          $modulePath = 'src/ps-script-machine/ps-script-machine.psd1'
-          Test-ModuleManifest -Path $modulePath -ErrorAction Stop
-
-          # Verify FunctionsToExport is explicit
-          $manifestData = Import-PowerShellDataFile -Path $modulePath
-          if ($manifestData.FunctionsToExport -contains '*' -or $manifestData.FunctionsToExport.Count -eq 0) {
-            Write-Error "FunctionsToExport must be an explicit list"
-            exit 1
-          }
-
-          # Verify private functions are NOT exported
-          $privateFuncs = Get-ChildItem -Path 'src/ps-script-machine/Private/*.ps1' -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty BaseName
-          foreach ($pf in $privateFuncs) {
-            if ($manifestData.FunctionsToExport -contains $pf) {
-              Write-Error "Private function '$pf' must not be in FunctionsToExport"
-              exit 1
-            }
-          }
-
-      - name: Run PSScriptAnalyzer (CI mode - warnings are fatal)
-        shell: pwsh
-        run: |
-          $analyzerResults = Invoke-ScriptAnalyzer -Path 'src' -Settings 'PSScriptAnalyzerSettings.psd1' -Severity Error, Warning -Recurse
-          if ($analyzerResults) {
-            $errors = $analyzerResults | Where-Object Severity -eq 'Error'
-            $warnings = $analyzerResults | Where-Object Severity -eq 'Warning'
-            if ($errors.Count -gt 0) {
-              $errors | Format-Table -AutoSize
-              Write-Error "PSScriptAnalyzer found $($errors.Count) error(s)"
-              exit 1
-            }
-            if ($warnings.Count -gt 0) {
-              $warnings | Format-Table -AutoSize
-              Write-Error "PSScriptAnalyzer found $($warnings.Count) warning(s). In CI mode, warnings are fatal."
-              exit 1
-            }
-          }
-
-      - name: Run Pester tests with coverage
-        shell: pwsh
-        run: |
-          $pesterConfig = New-PesterConfiguration -Hashtable @{
-            Run = @{
-              Path = 'tests/Unit'
-              PassThru = $true
-            }
-            CodeCoverage = @{
-              Enabled = $true
-              Path = 'src/ps-script-machine/Public/*.ps1', 'src/ps-script-machine/Private/*.ps1'
-              OutputFormat = 'JaCoCo'
-              OutputPath = 'build/output/coverage.xml'
-              UseBreakpoints = $false
-            }
-            Output = @{
-              Verbosity = 'Normal'
-            }
-          }
-          $result = Invoke-Pester -Configuration $pesterConfig
-          if ($result.FailedCount -gt 0) {
-            Write-Error "Pester tests failed: $($result.FailedCount) test(s) failed"
-            exit 1
-          }
-          Write-Host "Passed: $($result.PassedCount)"
-          Write-Host "Failed: $($result.FailedCount)"
-          Write-Host "Coverage: $($result.CodeCoverage.CoveragePercent)%"
-
-          # Fail if coverage is 0% (broken measurement)
-          if ($result.CodeCoverage.CoveragePercent -eq 0) {
-            Write-Error "Code coverage is 0%. Coverage measurement is broken."
-            exit 1
-          }
-
-          # Fail if coverage is below 80%
-          $threshold = 80
-          if ($result.CodeCoverage.CoveragePercent -lt $threshold) {
-            Write-Error "Code coverage $($result.CodeCoverage.CoveragePercent)% is below threshold $threshold%"
-            exit 1
-          }
-
-      - name: Check documentation
-        shell: pwsh
-        run: |
-          $publicFunctions = Get-ChildItem -Path 'src/ps-script-machine/Public/*.ps1' -ErrorAction Stop
-          foreach ($file in $publicFunctions) {
-            $content = Get-Content -Path $file.FullName -Raw
-            if ($content -notmatch '\.SYNOPSIS') { throw "Missing .SYNOPSIS in $($file.Name)" }
-            if ($content -notmatch '\.DESCRIPTION') { throw "Missing .DESCRIPTION in $($file.Name)" }
-            if ($content -notmatch '\.EXAMPLE') { throw "Missing .EXAMPLE in $($file.Name)" }
-            if ($content -notmatch '\.OUTPUTS') { throw "Missing .OUTPUTS in $($file.Name)" }
-            if ($content -notmatch '\.NOTES') { throw "Missing .NOTES in $($file.Name)" }
-          }
-
-      - name: Run agent compliance check
-        shell: pwsh
-        run: |
-          & .\scripts\Test-AgentCompliance.ps1 -ErrorAction Stop
-
-      - name: Scan for secrets
-        shell: pwsh
-        run: |
-          $allFiles = Get-ChildItem -Path '.' -Recurse -Include '*.ps1','*.psm1','*.psd1','*.json' -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -notmatch '\\\.git\\' }
-          $secretPatterns = @(
-            '(?i)password\s*=\s*[''"][^''"]{4,}[''"]',
-            '(?i)secret\s*=\s*[''"][^''"]{4,}[''"]',
-            '(?i)api[_-]?key\s*=\s*[''"][^''"]{4,}[''"]'
-          )
-          $found = $false
-          foreach ($file in $allFiles) {
-            $content = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
-            if (-not $content) { continue }
-            foreach ($pattern in $secretPatterns) {
-              $lines = $content -split "`n"
-              $lineNum = 0
-              foreach ($line in $lines) {
-                $lineNum++
-                if ($line -match $pattern -and $line -notmatch '^\s*#' -and $line -notmatch 'example' -and $line -notmatch 'Get-Credential' -and $line -notmatch 'ConvertTo-SecureString') {
-                  Write-Error "POTENTIAL SECRET in $($file.Name):$lineNum"
-                  $found = $true
-                }
-              }
-            }
-          }
-          if ($found) { exit 1 }
-
-      - name: Build module artifact
-        shell: pwsh
-        run: |
-          $outputPath = 'build/output/ps-script-machine'
-          if (Test-Path $outputPath) {
-            Remove-Item -Path $outputPath -Recurse -Force
-          }
-          Copy-Item -Path 'src/ps-script-machine' -Destination $outputPath -Recurse -Force
-          Test-ModuleManifest -Path "$outputPath/ps-script-machine.psd1" -ErrorAction Stop
-          Write-Host "Module artifact built to: $outputPath"
+          # Invoke-Build.ps1 is the single source of truth for the build/QA
+          # process. It runs manifest validation, PSScriptAnalyzer, Pester
+          # tests with coverage, documentation checks, the secret scan,
+          # agent compliance, and the module build - identically to a local
+          # run. CI must not re-implement any of this logic separately, or
+          # local and CI results can silently drift apart.
+          .\scripts\Invoke-Build.ps1 -CI -ErrorAction Stop
 
       - name: Upload test results
         if: always()

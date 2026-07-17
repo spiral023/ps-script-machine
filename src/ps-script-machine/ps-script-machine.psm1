@@ -34,78 +34,61 @@ $script:ModuleSessions = [System.Collections.Generic.HashSet[string]]::new(
     [System.StringComparer]::OrdinalIgnoreCase
 )
 
-# Define stub functions for PowerCLI cmdlets when PowerCLI is not installed.
-# This allows the module to be imported and unit-tested (with mocks) even
-# without PowerCLI being present.  The stubs are defined in the module scope
-# so that Pester can mock them with -ModuleName 'ps-script-machine'.
-# Stub functions for PowerCLI cmdlets are defined with matching parameter names
-# (but no validation constraints) so that Pester mocks can intercept calls
-# and ParameterFilter can access parameter values.
-# When PowerCLI is installed, these stubs are not created.
-# Note: We check for the PowerCLI module specifically, not just whether a
-# command name exists, because some names (e.g. Get-VMHost) collide with
-# Hyper-V cmdlets on Windows.
-$powerCLILoaded = $null -ne (Get-Module -Name 'VMware.VimAutomation.ViCore' -ErrorAction SilentlyContinue) -or
-    $null -ne (Get-Module -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue)
+# PowerCLI is an external dependency (see ExternalModuleDependencies in the
+# manifest) and is intentionally NOT required to import this module: unit
+# tests mock every PowerCLI cmdlet the module calls. Test-only stand-ins for
+# those cmdlets live exclusively in tests/Unit/TestHelpers.ps1 (dot-sourced
+# by test files before Import-Module) — the production module itself no
+# longer defines stub commands, so a missing PowerCLI installation cannot be
+# silently masked at runtime. Real usage is gated by Connect-VIServerSession,
+# which fails fast with an actionable error if PowerCLI is not installed.
+$script:PowerCLILoaded = $null -ne (Get-Module -Name 'VMware.VimAutomation.ViCore' -ErrorAction SilentlyContinue) -or
+$null -ne (Get-Module -Name 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue)
 
-if (-not $powerCLILoaded) {
-    Write-Verbose 'PowerCLI not detected. Defining stub functions for unit testing.'
-    function Connect-VIServer {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Server,
-            [Parameter()] $Credential,
-            [Parameter()] $Port,
-            [Parameter()] $Protocol
-        )
-    }
-    function Disconnect-VIServer {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Server,
-            [Parameter()] $Confirm
-        )
-    }
-    function Get-VMHost {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Server,
-            [Parameter()] $Name,
-            [Parameter()] $Location
-        )
-    }
-    function Get-EsxCli {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Server,
-            [Parameter()] $VMHost
-        )
-    }
-    function Get-Cluster {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Name,
-            [Parameter()] $Server
-        )
-    }
-    function Get-VMHostNetworkAdapter {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $VMHost,
-            [switch] $Physical
-        )
-    }
-    function Get-View {
-        [CmdletBinding()]
-        param(
-            [Parameter()] $Id
-        )
-    }
+if (-not $script:PowerCLILoaded) {
+    Write-Verbose 'PowerCLI not detected in the current session. PowerCLI cmdlets must be provided by a real installation or mocked in tests.'
 }
 
 # Track which VIServer sessions were opened by this module instance so that
 # Disconnect-VIServerSession only disconnects sessions the module created.
 # External sessions (opened by the caller) are never disconnected by the module.
+
+#region Function loading helpers
+
+# Returns the names of every function declared in a script file (including
+# nested/inner helper functions), using the PowerShell language parser
+# instead of a line-anchored regex. Unlike a regex match on
+# '^\s*function\s+Name\s*\{', this reliably finds ALL declarations in a
+# file regardless of attributes, multi-line signatures, or multiple
+# functions per file (e.g. a public function plus private script: helpers
+# defined alongside it).
+function script:Get-DeclaredFunctionName {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]
+        $Path
+    )
+
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$parseErrors)
+
+    if ($parseErrors -and $parseErrors.Count -gt 0) {
+        $errorMessages = ($parseErrors | ForEach-Object { $_.Message }) -join '; '
+        throw "Failed to parse '$Path': $errorMessages"
+    }
+
+    $functionAsts = $ast.FindAll(
+        { param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] },
+        $true
+    )
+
+    return @($functionAsts | ForEach-Object { $_.Name })
+}
+
+#endregion
 
 #region Private function loading
 
@@ -121,14 +104,9 @@ $loadedFunctionNames = [System.Collections.Generic.HashSet[string]]::new(
 
 foreach ($function in $privateFunctions) {
     try {
-        # Detect duplicate function definitions before dot-sourcing
-        $fileContent = Get-Content -Path $function.FullName -Raw -ErrorAction Stop
-        $funcNameMatch = [regex]::Match(
-            $fileContent,
-            '(?m)^\s*function\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{'
-        )
-        if ($funcNameMatch.Success) {
-            $funcName = $funcNameMatch.Groups[1].Value
+        # Detect duplicate function definitions (AST-based) before dot-sourcing
+        $declaredNames = Get-DeclaredFunctionName -Path $function.FullName
+        foreach ($funcName in $declaredNames) {
             if ($loadedFunctionNames.Contains($funcName)) {
                 throw "Duplicate function name '$funcName' detected in $($function.FullName). Function names must be unique."
             }
@@ -156,14 +134,9 @@ $exportedFunctions = @()
 
 foreach ($function in $publicFunctions) {
     try {
-        # Detect duplicate function definitions before dot-sourcing
-        $fileContent = Get-Content -Path $function.FullName -Raw -ErrorAction Stop
-        $funcNameMatch = [regex]::Match(
-            $fileContent,
-            '(?m)^\s*function\s+([A-Za-z][A-Za-z0-9_-]*)\s*\{'
-        )
-        if ($funcNameMatch.Success) {
-            $funcName = $funcNameMatch.Groups[1].Value
+        # Detect duplicate function definitions (AST-based) before dot-sourcing
+        $declaredNames = Get-DeclaredFunctionName -Path $function.FullName
+        foreach ($funcName in $declaredNames) {
             if ($loadedFunctionNames.Contains($funcName)) {
                 throw "Duplicate function name '$funcName' detected in $($function.FullName). Function names must be unique."
             }

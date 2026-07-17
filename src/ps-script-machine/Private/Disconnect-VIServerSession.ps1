@@ -47,8 +47,18 @@ function Disconnect-VIServerSession {
     }
 
     # Determine the session key for tracking lookup
-    $serverName = if ($Connection.Name) { $Connection.Name } else { [string]$Connection }
-    $sessionId = if ($Connection.SessionId) { $Connection.SessionId } else { '' }
+    $serverName = if ($Connection.Name) {
+        $Connection.Name 
+    }
+    else {
+        [string]$Connection 
+    }
+    $sessionId = if ($Connection.SessionId) {
+        $Connection.SessionId 
+    }
+    else {
+        '' 
+    }
     $sessionKey = "${serverName}:${sessionId}"
 
     # Only disconnect sessions that were opened by this module

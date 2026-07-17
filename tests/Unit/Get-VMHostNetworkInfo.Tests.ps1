@@ -4,8 +4,15 @@
 .SYNOPSIS
     Unit tests for Get-VMHostNetworkInfo function.
 #>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Disposable mock PSCredential for unit testing only - never a real secret, never persisted or logged.')]
+param()
 
 BeforeAll {
+    # Load PowerCLI test stand-ins (global scope) before the module is imported.
+    # The production module no longer defines its own PowerCLI stubs, so these
+    # global functions are what Pester mocks against via -ModuleName.
+    . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
+
     $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\src\ps-script-machine\ps-script-machine.psd1'
     Import-Module -Name $modulePath -Force -ErrorAction Stop
 

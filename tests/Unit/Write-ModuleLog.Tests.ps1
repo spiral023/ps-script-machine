@@ -235,7 +235,7 @@ Describe 'Write-ModuleLog' {
         }
 
         It 'should redact password key in hashtable Data' {
-            $testData = @{ Server = 'vcenter01'; Password = 'secret123' }
+            $testData = @{ Server = 'vcenter01'; Password = 'secret123' }  # secret-scan:ignore - fake fixture, verifies redaction
             InModuleScope 'ps-script-machine' -Parameters @{ LogPath = $script:testLogPath; TestData = $testData } {
                 Write-ModuleLog -Message 'Data redaction test' -Level Information -Data $TestData -LogFile $LogPath -InformationAction SilentlyContinue
             }
@@ -246,7 +246,7 @@ Describe 'Write-ModuleLog' {
         }
 
         It 'should redact token key in hashtable Data' {
-            $testData = @{ Endpoint = 'api.local'; Token = 'tok123' }
+            $testData = @{ Endpoint = 'api.local'; Token = 'tok123' }  # secret-scan:ignore - fake fixture, verifies redaction
             InModuleScope 'ps-script-machine' -Parameters @{ LogPath = $script:testLogPath; TestData = $testData } {
                 Write-ModuleLog -Message 'Token data test' -Level Information -Data $TestData -LogFile $LogPath -InformationAction SilentlyContinue
             }
@@ -257,7 +257,7 @@ Describe 'Write-ModuleLog' {
         }
 
         It 'should redact password property in PSCustomObject Data' {
-            $testData = [PSCustomObject]@{ Server = 'vcenter01'; Password = 'secret456' }
+            $testData = [PSCustomObject]@{ Server = 'vcenter01'; Password = 'secret456' }  # secret-scan:ignore - fake fixture, verifies redaction
             InModuleScope 'ps-script-machine' -Parameters @{ LogPath = $script:testLogPath; TestData = $testData } {
                 Write-ModuleLog -Message 'PSO data test' -Level Information -Data $TestData -LogFile $LogPath -InformationAction SilentlyContinue
             }

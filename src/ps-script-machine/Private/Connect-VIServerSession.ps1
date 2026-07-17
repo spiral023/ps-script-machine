@@ -105,6 +105,10 @@ function Connect-VIServerSession {
 
     begin {
         Write-Verbose "Connecting to VIServer: $Server on port $Port via $Protocol"
+
+        if (-not (Get-Command -Name 'Connect-VIServer' -ErrorAction SilentlyContinue)) {
+            throw "VMware PowerCLI is not installed or not imported. Connect-VIServer is not available. Install it with: Install-Module VMware.PowerCLI -Scope CurrentUser"
+        }
     }
 
     process {

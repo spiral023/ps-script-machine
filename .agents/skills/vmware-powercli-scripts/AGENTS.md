@@ -82,7 +82,7 @@ Use `Get-Credential` or `PSCredential` objects for all authentication. Never har
 **Incorrect: hardcoded password**
 
 ```powershell
-$password = "MySecret123!"
+$password = "MySecret123!"  # secret-scan:ignore - documented anti-pattern example, not a real credential
 $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
 $credential = New-Object System.Management.Automation.PSCredential("admin", $securePassword)
 Connect-VIServer -Server vcenter.local -User admin -Password "MySecret123!"
@@ -839,7 +839,7 @@ Never hardcode passwords, API keys, or tokens.
 **Incorrect:**
 
 ```powershell
-$password = "P@ssw0rd123!"
+$password = "P@ssw0rd123!"  # secret-scan:ignore - documented anti-pattern example, not a real credential
 $server = "vcenter-prod.firma.local"
 ```
 
