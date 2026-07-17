@@ -48,9 +48,11 @@ function Get-VIServerInventory {
         $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
-        Write-Warning ("Die vCenter-Liste '{0}' konnte nicht gelesen werden (vermutlich defektes JSON). " +
-            'Sie wird ignoriert - vCenter können weiterhin frei eingegeben werden. ' +
-            'Zum Beheben: Datei löschen oder reparieren. Details: {1}' -f $Path, $_.Exception.Message)
+        Write-Warning ((
+                "Die vCenter-Liste '{0}' konnte nicht gelesen werden (vermutlich defektes JSON). " +
+                'Sie wird ignoriert - vCenter können weiterhin frei eingegeben werden. ' +
+                'Zum Beheben: Datei löschen oder reparieren. Details: {1}'
+            ) -f $Path, $_.Exception.Message)
         return @()
     }
 

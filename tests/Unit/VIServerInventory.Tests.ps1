@@ -49,9 +49,15 @@ Describe 'Get-VIServerInventory' {
         Set-Content -LiteralPath $file -Value '{ das ist kein json' -Encoding utf8
 
         $result = InModuleScope 'ps-script-machine' -Parameters @{ Path = $file } {
-            Get-VIServerInventory -Path $Path -WarningAction SilentlyContinue
+            Get-VIServerInventory -Path $Path 3>&1
         }
-        @($result).Count | Should -Be 0
+        # Trenne Warnungen vom (leeren) Ergebnis:
+        $warn = @($result | Where-Object { $_ -is [System.Management.Automation.WarningRecord] })
+        $data = @($result | Where-Object { $_ -isnot [System.Management.Automation.WarningRecord] })
+        $data.Count | Should -Be 0
+        $warn.Count | Should -Be 1
+        $warn[0].Message | Should -Match ([regex]::Escape($file))
+        $warn[0].Message | Should -Not -Match '\{0\}'
     }
 
     It 'skips entries without fqdn' {
