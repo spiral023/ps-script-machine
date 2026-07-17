@@ -1,0 +1,5 @@
+[
+  { "name": "Produktion RZ1", "fqdn": "vc01.example.local", "description": "Produktions-vCenter Rechenzentrum 1" },
+  { "name": "Produktion RZ2", "fqdn": "vc02.example.local", "description": "Produktions-vCenter Rechenzentrum 2" },
+  { "name": "Test", "fqdn": "vc-test.example.local", "description": "Testumgebung" }
+]

@@ -46,6 +46,7 @@ credentials.json
 config/environments.psd1
 config/settings.json
 config/secrets.json
+config/vcenters.json
 
 # Logs
 logs/
