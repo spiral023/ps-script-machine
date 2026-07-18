@@ -40,11 +40,12 @@ try {
 
     # Connect to vCenter
     Write-Host "Connecting to $VCenterServer..." -ForegroundColor Cyan
-    $session = Connect-VIServerSession -Server $VCenterServer -Credential $cred -ErrorAction Stop
+    $connection = Connect-MultiVIServer -Server $VCenterServer -Credential $cred -NonInteractive
 
-    if (-not $session) {
+    if ($connection.Sessions.Count -eq 0) {
         throw "Failed to connect to $VCenterServer"
     }
+    $session = $connection.Sessions[0]
     Write-Host "Connected successfully." -ForegroundColor Green
 
     # Retrieve CDP network information
@@ -76,9 +77,9 @@ catch {
 }
 finally {
     # Always disconnect
-    if ($session) {
+    if ($connection -and $connection.Sessions.Count -gt 0) {
         try {
-            Disconnect-VIServer -Server $session -Confirm:$false -ErrorAction SilentlyContinue
+            Disconnect-VIServer -Server $connection.Sessions -Confirm:$false -ErrorAction SilentlyContinue
             Write-Host "Disconnected from $VCenterServer" -ForegroundColor Cyan
         }
         catch {
