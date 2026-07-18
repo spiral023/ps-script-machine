@@ -9,12 +9,19 @@ July 2026
 > generating, or refactoring PowerShell scripts for VMware vSphere
 > automation. It is optimized for consistency and quality by AI-assisted
 > workflows.
+>
+> **Scope:** This is the *craft* companion — general PowerCLI patterns with
+> rationale and incorrect/correct examples, reusable across projects. The
+> **project-specific** mandates for this repository (required versions,
+> directory layout, naming conventions, Definition of Done, the ≥ 80 %
+> coverage gate, and the build process) live in the repository-root
+> `AGENTS.md`, which is authoritative on conflict.
 
 ---
 
 ## Abstract
 
-Comprehensive PowerShell scripting guide for VMware PowerCLI and vSphere automation. Contains 20+ rules across 8 categories, prioritized by impact from critical (credential handling, error management) to incremental (documentation). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific guidance for automated code generation and refactoring.
+Comprehensive PowerShell scripting guide for VMware PowerCLI and vSphere automation. Contains 30+ rules across 11 categories, prioritized by impact from critical (credential handling, error management) to incremental (documentation). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific guidance for automated code generation and refactoring.
 
 ---
 

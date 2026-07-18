@@ -11,6 +11,11 @@ metadata:
 
 Comprehensive guide for creating high-quality PowerShell scripts with VMware PowerCLI. Contains 30+ rules across 11 categories, prioritized by impact to guide automated code generation, refactoring, and quality assurance.
 
+> **Scope:** general PowerCLI craft (the *why* and *how*, with examples).
+> Project-specific mandates for this repository — required versions,
+> directory layout, Definition of Done, coverage gate, and build process —
+> live in the repository-root `AGENTS.md` and take precedence on conflict.
+
 ## When to Apply
 
 Reference these guidelines when:

@@ -3,6 +3,25 @@
 > **Zentrale Regelbasis für alle Coding Agents.**
 > Agent-spezifische Dateien (`CLAUDE.md`, `.github/copilot-instructions.md`) verweisen auf diese Datei.
 
+## Verhältnis zu den Skills (eine Quelle je Thema)
+
+Damit Regeln nicht doppelt und widersprüchlich gepflegt werden, gilt eine
+klare Arbeitsteilung:
+
+- **Diese Datei (`AGENTS.md`)** ist die *maßgebliche* Quelle für die
+  **projektspezifischen Mandate**: Versionen, Verzeichnisstruktur,
+  Namenskonventionen, Definition of Done, Code-Coverage-Schwelle,
+  Build-Prozess und Vorgehen. Bei Konflikten gewinnt diese Datei.
+- Der Skill **`vmware-powercli-scripts`**
+  (`.agents/skills/vmware-powercli-scripts/`) ist die *Vertiefung*:
+  allgemeines PowerCLI-Handwerk mit Falsch/Richtig-Codebeispielen und
+  Begründungen zu Security, Fehlerbehandlung, Verbindungsverwaltung, Tests,
+  State-Change und modularer Architektur. Für das *Warum* und *Wie* der
+  Standards in §5–§10 dort nachschlagen.
+- Der Skill **`script-werkstatt`** (`.agents/skills/script-werkstatt/`) ist
+  der *Prozess*, um aus einer natürlichsprachlichen Beschreibung ein
+  fertiges Skript zu erzeugen (siehe unten).
+
 ## 1. Ziel
 
 Dieses Repository ist eine professionelle Entwicklungsplattform und Vorlage für Coding Agents, die hochwertige PowerShell- und PowerCLI-Skripte für VMware-Administratoren erstellen.
