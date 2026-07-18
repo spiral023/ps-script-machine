@@ -16,8 +16,9 @@
     4. Code coverage (fails if below threshold or 0%)
     5. Documentation check
     6. Module build
-    7. Secret scan (check for accidentally committed secrets)
-    8. Agent compliance check
+    7. Standalone script bundling
+    8. Secret scan (check for accidentally committed secrets)
+    9. Agent compliance check
 
     Tasks run in the order above. If a task fails, no further tasks are
     attempted - but a full summary is always printed at the end, showing
@@ -28,7 +29,7 @@
 
 .PARAMETER Task
     The build task to run. If not specified, all tasks are run.
-    Valid values: Manifest, Analyze, Test, Coverage, Docs, Build, Secrets, Compliance, All
+    Valid values: Manifest, Analyze, Test, Coverage, Docs, Build, Standalone, Secrets, Compliance, All
 
 .PARAMETER CodeCoverageThreshold
     The minimum code coverage percentage. Default: 80.
@@ -66,7 +67,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet('Manifest', 'Analyze', 'Test', 'Coverage', 'Docs', 'Build', 'Secrets', 'Compliance', 'All')]
+    [ValidateSet('Manifest', 'Analyze', 'Test', 'Coverage', 'Docs', 'Build', 'Standalone', 'Secrets', 'Compliance', 'All')]
     [string[]]
     $Task = @('All'),
 
@@ -97,7 +98,7 @@ $runAll = $Task -contains 'All'
 # Canonical task order. A task's position here also defines its place in
 # the fail-fast sequence below: once any task fails, every task after it
 # in this list is skipped and reported as 'Not Run'.
-$taskOrder = @('Manifest', 'Analyze', 'Test', 'Coverage', 'Docs', 'Build', 'Secrets', 'Compliance')
+$taskOrder = @('Manifest', 'Analyze', 'Test', 'Coverage', 'Docs', 'Build', 'Standalone', 'Secrets', 'Compliance')
 
 $taskActions = [ordered]@{
     Manifest = {
@@ -306,6 +307,18 @@ $taskActions = [ordered]@{
         $builtManifest = Join-Path $buildOutput 'ps-script-machine.psd1'
         Test-ModuleManifest -Path $builtManifest -ErrorAction Stop | Out-Null
         Write-Host "  Built module manifest is valid."
+    }
+
+    Standalone = {
+        Write-Host "Building standalone scripts..."
+        $standaloneScript = Join-Path $repoRoot 'scripts\Export-StandaloneScript.ps1'
+        if (-not (Test-Path $standaloneScript)) {
+            throw "Standalone bundler not found: $standaloneScript"
+        }
+        $created = & $standaloneScript -ErrorAction Stop
+        foreach ($file in @($created)) {
+            Write-Host "  Created: $file"
+        }
     }
 
     Secrets = {
