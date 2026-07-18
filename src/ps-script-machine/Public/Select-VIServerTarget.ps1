@@ -82,6 +82,11 @@ function Select-VIServerTarget {
         $userInput = Read-MenuChoice -Prompt 'vCenter'
         $tokens = @($userInput -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
+        if ($tokens.Count -eq 0) {
+            Write-Host 'Bitte eine Auswahl treffen.' -ForegroundColor Yellow
+            continue
+        }
+
         if ($tokens.Count -eq 1 -and $tokens[0] -ieq 'alle') {
             if ($inventory.Count -eq 0) {
                 Write-Host 'Es sind keine vCenter gespeichert - bitte einen FQDN eingeben.' -ForegroundColor Yellow
@@ -109,16 +114,18 @@ function Select-VIServerTarget {
             return [string[]]@($selected | Select-Object -Unique)
         }
 
-        # Freie FQDN-Eingabe: nur Hostname-taugliche Zeichen zulassen.
+        # Freie FQDN-Eingabe: nur Hostname-taugliche Zeichen zulassen, reine
+        # Zifferfolgen zählen nicht als FQDN (sonst würden gemischte
+        # Nummer/FQDN-Eingaben wie "1,vc.local" fälschlich akzeptiert).
         $fqdnPattern = '^[a-zA-Z0-9][a-zA-Z0-9\.\-]*$'
-        $allTokensAreFqdns = @($tokens | Where-Object { $_ -match $fqdnPattern }).Count -eq $tokens.Count
+        $allTokensAreFqdns = @($tokens | Where-Object { $_ -match $fqdnPattern -and $_ -notmatch '^\d+$' }).Count -eq $tokens.Count
         if (-not $allTokensAreFqdns) {
             Write-Host 'Eingabe nicht erkannt: bitte Nummern, "alle" oder gültige Servernamen (FQDN) eingeben.' -ForegroundColor Yellow
             continue
         }
 
         $knownFqdns = @($inventory.Fqdn)
-        $newFqdns = @($tokens | Where-Object { $_ -notin $knownFqdns })
+        $newFqdns = @($tokens | Where-Object { $_ -notin $knownFqdns } | Select-Object -Unique)
         if ($newFqdns.Count -gt 0) {
             $saveAnswer = Read-MenuChoice `
                 -Prompt ('Neue vCenter für später speichern? ({0})' -f ($newFqdns -join ', ')) `

@@ -117,4 +117,41 @@ Describe 'Select-VIServerTarget' {
         $result = Select-VIServerTarget -InventoryPath $emptyPath
         $result | Should -Be @('vc-x.test.local')
     }
+
+    It 're-prompts on a bare comma and never returns an empty selection' {
+        $global:PsmTestAnswers = [System.Collections.Queue]::new()
+        $global:PsmTestAnswers.Enqueue(',')
+        $global:PsmTestAnswers.Enqueue('2')
+        Mock Read-Host { $global:PsmTestAnswers.Dequeue() } -ModuleName 'ps-script-machine'
+
+        $result = Select-VIServerTarget -InventoryPath $script:inventoryPath
+        $result | Should -Be @('vc02.test.local')
+        Should -Invoke Read-Host -ModuleName 'ps-script-machine' -Times 2 -Exactly
+    }
+
+    It 'rejects a mixed number+FQDN input and re-prompts' {
+        $global:PsmTestAnswers = [System.Collections.Queue]::new()
+        $global:PsmTestAnswers.Enqueue('1,vc.local')
+        $global:PsmTestAnswers.Enqueue('2')
+        Mock Read-Host { $global:PsmTestAnswers.Dequeue() } -ModuleName 'ps-script-machine'
+
+        $result = Select-VIServerTarget -InventoryPath $script:inventoryPath
+        $result | Should -Be @('vc02.test.local')
+        $result | Should -Not -Contain 'vc.local'
+        $result | Should -Not -Contain '1'
+    }
+
+    It 'saves a duplicate new FQDN only once' {
+        $global:PsmTestAnswers = [System.Collections.Queue]::new()
+        $global:PsmTestAnswers.Enqueue('vc-dup.test.local,vc-dup.test.local')
+        $global:PsmTestAnswers.Enqueue('J')
+        Mock Read-Host { $global:PsmTestAnswers.Dequeue() } -ModuleName 'ps-script-machine'
+
+        $result = Select-VIServerTarget -InventoryPath $script:inventoryPath
+        @($result).Count | Should -Be 1
+        $result | Should -Be @('vc-dup.test.local')
+
+        $saved = Get-Content -LiteralPath $script:inventoryPath -Raw | ConvertFrom-Json
+        @($saved | Where-Object { $_.fqdn -eq 'vc-dup.test.local' }).Count | Should -Be 1
+    }
 }
