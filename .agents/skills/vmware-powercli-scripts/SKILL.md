@@ -109,20 +109,13 @@ Reference these guidelines when:
 
 ## How to Use
 
-Read individual rule files for detailed explanations and code examples:
+Every rule listed above is documented in full in the compiled guide
+`AGENTS.md` (in this skill directory). Look a rule up there by its prefix
+(e.g. `security-`, `error-`, `state-`) when you need the detailed
+explanation and code samples.
 
-```
-rules/security-credential-handling.md
-rules/error-try-catch-finally.md
-rules/vsphere-get-view-advanced.md
-```
-
-Each rule file contains:
+Each rule entry contains:
 - Brief explanation of why it matters
 - Incorrect code example with explanation
 - Correct code example with explanation
 - Additional context and references
-
-## Full Compiled Document
-
-For the complete guide with all rules expanded: `AGENTS.md`
