@@ -21,11 +21,19 @@ src/ps-script-machine/
 ├── ps-script-machine.psm1   # Root module (loads Public/Private)
 ├── Public/                   # Exported functions
 │   ├── Get-CdpNetworkInfo.ps1
-│   └── Export-ModuleData.ps1
+│   ├── Export-ModuleData.ps1
+│   ├── Select-VIServerTarget.ps1    # vCenter-Auswahlmenü (Skript-Werkstatt)
+│   └── Connect-MultiVIServer.ps1    # Mehrfach-Anmeldung (Skript-Werkstatt)
 ├── Private/                  # Internal helpers (exported for testing)
 │   ├── Connect-VIServerSession.ps1
-│   └── Write-ModuleLog.ps1
+│   ├── Write-ModuleLog.ps1
+│   ├── Read-MenuChoice.ps1          # Konsolen-Abfrage mit Standardwert (Skript-Werkstatt)
+│   ├── Get-VIServerInventory.ps1    # Liest config/vcenters.json (Skript-Werkstatt)
+│   └── Save-VIServerInventory.ps1   # Schreibt config/vcenters.json (Skript-Werkstatt)
 └── Classes/                  # PowerShell classes (optional)
+
+scripts/tools/                # Interaktive Wrapper, Quelle für den Standalone-Build
+build/standalone/             # Gebündelte Single-File-Skripte (gitignored)
 ```
 
 ## Data Flow
@@ -112,8 +120,21 @@ Disconnect-VIServer
 4. Code coverage        → JaCoCo output
 5. Documentation check  → SYNOPSIS, DESCRIPTION, EXAMPLE, OUTPUTS, NOTES
 6. Module build         → Copy to build/output
-7. Secret scan          → Pattern-based scan
+7. Standalone bundling  → scripts/Export-StandaloneScript.ps1
+8. Secret scan          → Pattern-based scan
 ```
+
+### Standalone bundling (`Export-StandaloneScript.ps1`)
+
+Bundles every interactive wrapper in `scripts/tools/` into a self-contained
+single-file script in `build/standalone/`. All module functions (Private
+first, then Public) are embedded as plain function definitions ahead of the
+wrapper's own code - no `Import-Module`, no dependency analysis (deliberate
+V1 simplicity; an AST-based resolution is a known future upgrade if the
+module grows past ~50 functions). Each generated file is verified twice:
+PowerShell parser syntax check, then `PSScriptAnalyzer -Severity Error`.
+PowerCLI itself is never embedded; the wrapper's own startup check prints a
+German installation guide if `VMware.PowerCLI` is missing.
 
 Any failure causes the build to fail.
 
@@ -187,9 +208,11 @@ to the standard schema (`PSTypeName`, `VIServer`, `RunId`, `Timestamp`,
 `Write-ModuleLog`) in **v2.0.0**. Because renaming `vCenter` to `VIServer`
 and adding `PSTypeName`/`RunId` changes the shape of the returned objects,
 this is a breaking change per the Semantic Versioning policy below and
-cannot be done silently in a patch/minor release - it also requires
-updating `scripts/tools/Export-CdpInformation.ps1`, which consumes the current
-column names for its CSV/JSON export.
+cannot be done silently in a patch/minor release. Note that
+`scripts/tools/Export-CdpInformation.ps1` was modernized as part of the
+Skript-Werkstatt feature and now consumes `Get-CdpNetworkInfo` /
+`Export-ModuleData` instead of `Get-VMHostNetworkInfo` - it is no longer
+affected by this migration.
 
 Until that migration lands, `tests/Unit/ResultObjectContract.Tests.ps1`
 documents this gap with an explicit, skipped contract test rather than
