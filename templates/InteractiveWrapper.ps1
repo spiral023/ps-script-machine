@@ -142,6 +142,12 @@ if ($connection.Sessions.Count -eq 0) {
     Write-Host ''
     Write-Host 'Es konnte zu keinem vCenter eine Verbindung aufgebaut werden - Abbruch.' -ForegroundColor Red
     Write-Host 'Prüfe Servernamen und Zugangsdaten und starte das Skript erneut.'
+    try {
+        Stop-Transcript | Out-Null
+    }
+    catch {
+        # Transcript war nicht (mehr) aktiv - unkritisch.
+    }
     exit 1
 }
 
@@ -193,7 +199,9 @@ try {
             $null = New-Item -Path $OutputPath -ItemType Directory -Force
         }
         $formats = if ($Format -eq 'beide') { @('CSV', 'JSON') } else { @($Format) }
-        $files = Export-ModuleData -Data $allResults.ToArray() -OutputPath $OutputPath -Format $formats -Force
+        $baseName = '__TOOL_NAME___{0:yyyy-MM-dd_HH-mm-ss}' -f (Get-Date)
+        $exportBase = Join-Path -Path $OutputPath -ChildPath $baseName
+        $files = Export-ModuleData -Data $allResults.ToArray() -OutputPath $exportBase -Format $formats -Force
     }
 
     Write-Host ''
