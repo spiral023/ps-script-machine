@@ -83,6 +83,13 @@ und erneut zusammenfassen.
    Referenz-Beispiel: `scripts/tools/Export-CdpInformation.ps1`.
    Die Marker `#region module-import`/`#endregion module-import` und den
    param-Block NIEMALS entfernen (Vertrag mit dem Standalone-Build).
+   Toolspezifische Fragen in der `tool-questions`-Region nutzen einfaches
+   `Read-Host` mit Standardwert (Enter = Standard) - NICHT `Read-MenuChoice`,
+   das ist eine private, modul-interne Funktion und im Wrapper nicht aufrufbar.
+   Für ein VERÄNDERNDES Tool außerdem den `.NOTES`-Hinweis
+   "Read-only: ..." aus `templates/InteractiveWrapper.ps1` entfernen bzw.
+   passend umformulieren - solche Tools folgen `templates/ChangeScript.ps1`
+   mit SupportsShouldProcess.
 3. **Pester-Tests** für neue Modul-Funktionen nach dem Muster der
    bestehenden Tests in `tests/Unit/` (TestHelpers.ps1 dot-sourcen,
    Mocks mit -ModuleName).

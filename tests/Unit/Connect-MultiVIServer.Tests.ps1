@@ -73,6 +73,13 @@ Describe 'Connect-MultiVIServer' {
             $result.Connected | Should -Be @('vc01.test.local')
             Should -Invoke Get-Credential -ModuleName 'ps-script-machine' -Times 1 -Exactly
         }
+
+        It 'prompts instead of throwing when -Credential is explicitly $null (wrapper call pattern)' {
+            Mock Get-Credential { $script:mockCredential } -ModuleName 'ps-script-machine'
+            $result = Connect-MultiVIServer -Server 'vc01.test.local' -Credential $null
+            $result.Connected | Should -Be @('vc01.test.local')
+            Should -Invoke Get-Credential -ModuleName 'ps-script-machine' -Times 1 -Exactly
+        }
     }
 
     Context 'A connection fails' {

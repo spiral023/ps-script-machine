@@ -73,7 +73,6 @@ function Connect-MultiVIServer {
         $Server,
 
         [Parameter(Mandatory = $false)]
-        [ValidateNotNull()]
         [System.Management.Automation.PSCredential]
         $Credential,
 
