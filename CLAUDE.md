@@ -41,4 +41,13 @@
 # 4. .\scripts\Invoke-Build.ps1 ausführen
 ```
 
+## Skript per Beschreibung erstellen (Skript-Werkstatt)
+
+Beschreibt ein Nutzer ein gewünschtes Skript in natürlicher Sprache
+(z. B. „Schreibe ein Script, das die CDP-Daten aller ESXi-Netzwerkinterfaces
+ausliest"), folge dem Workflow in
+`.agents/skills/script-werkstatt/SKILL.md`: dynamisches Interview in
+VMware-Fachsprache, Zusammenfassung zur Freigabe, dann Generierung über
+`templates/InteractiveWrapper.ps1` und `scripts/New-PowerCLITool.ps1`.
+
 Siehe `AGENTS.md` für die vollständige Definition of Done.

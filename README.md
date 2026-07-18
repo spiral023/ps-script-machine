@@ -84,6 +84,34 @@ Install-Module Pester -MinimumVersion 5.0 -Scope CurrentUser
 Install-Module PSScriptAnalyzer -Scope CurrentUser
 ```
 
+## Creating scripts from a plain-language description (Skript-Werkstatt)
+
+VMware admins without programming knowledge can request new tools in plain
+German inside Claude Code (or any coding agent following AGENTS.md):
+
+> „Schreibe ein Script, das die CDP-Daten aller ESXi-Netzwerkinterfaces
+> von allen Hosts von einem oder mehreren vCentern ausliest und als CSV
+> speichert."
+
+The agent follows `.agents/skills/script-werkstatt/SKILL.md`: it asks
+clarifying questions in VMware terms (never code terms), summarizes what
+the script will do, generates a tested module function plus an interactive
+wrapper in `scripts/tools/`, and runs the full build.
+
+Every generated wrapper guides the user through the same menu flow:
+vCenter selection (saved list in `config/vcenters.json` + free input),
+one credential prompt for all vCenters (with per-server retry on failure),
+tool-specific questions, progress display, and a summary with output paths.
+Unreachable vCenters are skipped and reported - they never abort the run.
+
+The build additionally bundles each wrapper into a self-contained
+single-file script in `build/standalone/` that runs on any machine with
+PowerShell 7.4+ and PowerCLI - no repository required:
+
+```powershell
+.\scripts\Invoke-Build.ps1 -Task Standalone
+```
+
 ## Local Development Workflow
 
 ```powershell

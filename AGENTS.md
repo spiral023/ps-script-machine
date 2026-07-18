@@ -19,6 +19,15 @@ Neue Skripte müssen standardmäßig sein:
 - **PowerShell-7.4-kompatibel** – `#Requires -Version 7.4`
 - **für VMware-Umgebungen geeignet** – explizite `-Server`-Übergabe
 
+### Skript-Werkstatt (natürlichsprachliche Erstellung)
+
+Für Skript-Wünsche in natürlicher Sprache gilt der Workflow in
+`.agents/skills/script-werkstatt/SKILL.md` (Interview → Freigabe →
+Generierung → Build → Übergabe). Interaktive Wrapper entstehen aus
+`templates/InteractiveWrapper.ps1` in `scripts/tools/` und werden vom
+Build-Task `Standalone` zusätzlich als Einzeldatei nach `build/standalone/`
+gebündelt.
+
 ## 2. Voraussetzungen
 
 | Komponente | Version |

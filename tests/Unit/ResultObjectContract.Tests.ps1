@@ -109,7 +109,7 @@ Describe 'Result object contract (docs/DEFINITION_OF_DONE.md)' {
 
     Context 'Get-VMHostNetworkInfo (known legacy exception)' {
         It 'Does not yet carry a PSTypeName - migration tracked for v2.0.0, see docs/ARCHITECTURE.md' {
-            Set-ItResult -Skipped -Because 'Get-VMHostNetworkInfo predates the current result-object schema. Decision recorded in docs/ARCHITECTURE.md ("Known Deviations") and CHANGELOG.md ("Unreleased" / Planned): migrate to PSTypeName/VIServer/RunId/Timestamp in v2.0.0 (breaking change - also touches scripts/Export-CdpInformation.ps1). This is not an open-ended exception; update this skip (and the two docs above) if the target version changes, and remove it once the migration ships.'
+            Set-ItResult -Skipped -Because 'Get-VMHostNetworkInfo predates the current result-object schema. Decision recorded in docs/ARCHITECTURE.md ("Known Deviations") and CHANGELOG.md ("Unreleased" / Planned): migrate to PSTypeName/VIServer/RunId/Timestamp in v2.0.0 (breaking change to the returned object shape only - scripts/tools/Export-CdpInformation.ps1 was modernized to consume Get-CdpNetworkInfo/Export-ModuleData and is no longer affected). This is not an open-ended exception; update this skip (and the two docs above) if the target version changes, and remove it once the migration ships.'
         }
     }
 }

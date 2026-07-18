@@ -892,10 +892,10 @@ Export-Csv ...
 **Correct: wrapper around module**
 
 ```powershell
-# scripts/Export-CdpInformation.ps1
+# scripts/tools/Export-CdpInformation.ps1
 Import-Module $modulePath
-$results = Get-VMHostNetworkInfo -Server $VCenter -Credential $credential
-$results | Export-ReportCsv -Path $csvPath
+$results = Get-CdpNetworkInfo -VIServer $session
+Export-ModuleData -Data $results -OutputPath $exportBase -Format $formats
 ```
 
 ### 11.3 Structured Output Only
