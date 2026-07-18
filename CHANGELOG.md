@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Migrate `Get-VMHostNetworkInfo` to the standard result-object schema
   (`PSTypeName`, `VIServer` instead of `vCenter`, `RunId`, `Timestamp`,
   `Write-ModuleLog`). This is a breaking change to the returned object
-  shape and to `scripts/Export-CdpInformation.ps1`, which consumes the
+  shape and to `scripts/tools/Export-CdpInformation.ps1`, which consumes the
   current column names. See docs/ARCHITECTURE.md, "Known Deviations".
 
 ## [1.0.0] - 2025-01-17

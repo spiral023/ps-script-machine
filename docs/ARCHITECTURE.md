@@ -188,7 +188,7 @@ to the standard schema (`PSTypeName`, `VIServer`, `RunId`, `Timestamp`,
 and adding `PSTypeName`/`RunId` changes the shape of the returned objects,
 this is a breaking change per the Semantic Versioning policy below and
 cannot be done silently in a patch/minor release - it also requires
-updating `scripts/Export-CdpInformation.ps1`, which consumes the current
+updating `scripts/tools/Export-CdpInformation.ps1`, which consumes the current
 column names for its CSV/JSON export.
 
 Until that migration lands, `tests/Unit/ResultObjectContract.Tests.ps1`
