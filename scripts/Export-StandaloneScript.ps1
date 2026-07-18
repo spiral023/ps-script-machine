@@ -1,3 +1,5 @@
+#Requires -Version 7.4
+
 <#
 .SYNOPSIS
     Baut eigenständige Single-File-Skripte aus den Wrappern in scripts/tools/.
