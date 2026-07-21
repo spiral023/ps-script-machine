@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "organization": "Custom - VMware Administrator",
   "date": "July 2026",
   "abstract": "Comprehensive PowerShell scripting guide for VMware PowerCLI and vSphere automation. Contains 30+ rules across 11 categories, prioritized by impact from critical (credential handling, error management) to incremental (documentation). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific guidance for automated code generation and refactoring in VMware administrator workflows.",

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "organization": "Custom - VMware Administrator",
   "date": "July 2026",
   "abstract": "Prozessdefinition fuer Claude Code, um aus der deutschen Beschreibung eines VMware-Administrators (ohne Programmierkenntnisse) ein fertiges, getestetes PowerCLI-Skript mit interaktivem Multi-vCenter-Menue zu erstellen. Deckt dynamisches Interview in VMware-Fachsprache, Freigabe-Zusammenfassung, Generierung ueber Modul-Funktionen und InteractiveWrapper.ps1, Pester-Tests, Build-Qualitaetssicherung und Uebergabe inklusive Standalone-Variante ab.",

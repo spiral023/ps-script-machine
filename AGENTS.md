@@ -21,6 +21,12 @@ klare Arbeitsteilung:
 - Der Skill **`script-werkstatt`** (`.agents/skills/script-werkstatt/`) ist
   der *Prozess*, um aus einer natürlichsprachlichen Beschreibung ein
   fertiges Skript zu erzeugen (siehe unten).
+- **`.agents/adr/`** hält einzelne, bereits getroffene Architekturentscheidungen
+  fest (schwer umkehrbar, ohne Kontext überraschend, Ergebnis einer echten
+  Abwägung) - z. B. warum Modul-Funktionen Sessions statt Server+Credential
+  nehmen. Vor Änderungen an Verbindungslogik, Wrapper-Aufbau oder
+  Skript-Ablageort dort nachsehen, bevor eine bereits getroffene Entscheidung
+  versehentlich rückgängig gemacht wird.
 
 ## 1. Ziel
 

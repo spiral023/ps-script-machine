@@ -1,10 +1,10 @@
 ---
 name: script-werkstatt
-description: Erstellt aus einer deutschen Beschreibung eines VMware-Administrators ein fertiges, getestetes PowerCLI-Skript mit interaktivem Multi-vCenter-Menü. Trigger - ein Nutzer beschreibt ein gewünschtes Skript in natürlicher Sprache ("Schreibe ein Script, das ...", "Ich brauche eine Auswertung ...", "Erstelle mir ein Tool ...") für vSphere/vCenter/ESXi-Aufgaben.
+description: Use when - ein Nutzer beschreibt ein gewünschtes Skript in natürlicher Sprache ("Schreibe ein Script, das ...", "Ich brauche eine Auswertung ...", "Erstelle mir ein Tool ...") für vSphere/vCenter/ESXi-Aufgaben, insbesondere wenn der Nutzer keine Programmierkenntnisse hat.
 license: MIT
 metadata:
   author: custom
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Skript-Werkstatt: Von der Beschreibung zum fertigen Skript
@@ -25,6 +25,17 @@ deutschen Beschreibung zu einem fertigen, getesteten PowerCLI-Skript.
    bekommt SupportsShouldProcess gemäß templates/ChangeScript.ps1.
 4. **Build-Fehler behebst du selbst.** Der Admin sieht davon nichts.
 
+### Red Flags - nicht überspringen
+
+Diese Gedanken bedeuten: STOPP, nicht die Abkürzung nehmen.
+
+| Gedanke | Realität |
+|---|---|
+| "Der Admin hat's eilig, ich baue direkt los" | Ohne Phase 2/3 baust du das Falsche - das kostet am Ende mehr Zeit als die Rückfrage. |
+| "Ich weiß schon, was er braucht, das ist Standard" | Geltungsbereich, Ausgabeformat und Fehlerverhalten unterscheiden sich pro Wunsch - trotzdem zusammenfassen (Phase 3). |
+| "Die Zusammenfassung ist nur Formsache" | Die Freigabe in Phase 3 ist die Vertragsstelle - ohne sie gibt es keinen Rahmen, gegen den das Endergebnis geprüft werden kann. |
+| "Bei einem verändernden Skript reicht diesmal ein kurzer Hinweis statt echter Sicherheitsfragen" | Regel 3 gilt ausnahmslos - SupportsShouldProcess und Vorschau-Lauf sind nicht verhandelbar. |
+
 ## Phase 1: Verstehen
 
 Ordne den Wunsch ein, bevor du fragst:
@@ -34,6 +45,10 @@ Ordne den Wunsch ein, bevor du fragst:
 - Gibt es schon eine passende Modul-Funktion? Prüfe
   `Get-Command -Module ps-script-machine` bzw. `src/ps-script-machine/Public/`.
   Falls ja: nur neuen Wrapper bauen, keine neue Funktion.
+- Betrifft der Wunsch Verbindungsaufbau, Wrapper-Struktur oder
+  Skript-Ablageort? Kurz `.agents/adr/` prüfen - dort stehen bereits
+  getroffene, sonst leicht versehentlich rückgängig gemachte
+  Entscheidungen (z. B. Session- statt Server+Credential-Konvention).
 
 ## Phase 2: Dynamisches Interview
 
@@ -99,6 +114,13 @@ und erneut zusammenfassen.
 `.\scripts\Invoke-Build.ps1` ausführen. ALLE Tasks müssen PASSED sein
 (inkl. Coverage >= 80 % und Standalone-Bundling). Fehler selbst beheben
 und erneut bauen - den Admin damit nicht behelligen.
+
+Danach Abgleich gegen die Zusammenfassung aus Phase 3 (Vertragsstelle):
+Geht jede dort zugesagte Aussage - Geltungsbereich, Ausgabeformat und
+-ort, Fehlerverhalten, bei verändernden Skripten Vorschau/Bestätigung -
+Satz für Satz durch. Jede Zusage muss erfüllt sein; jede Abweichung
+(fehlend oder unangekündigt zusätzlich, z. B. weitere Spalten/Filter)
+muss behoben oder mit dem Admin geklärt werden, bevor Phase 6 beginnt.
 
 ## Phase 6: Übergabe
 
