@@ -96,7 +96,28 @@ build/             – Build-Output (gitignored)
 - **Dateien**: Eine Funktion pro Datei. Dateiname = Funktionsname.
 - **Klassen**: PascalCase, im `Classes/`-Verzeichnis.
 - **Variablen**: PascalCase für Parameter und öffentliche Variablen, camelCase für interne.
+  - **Boolesche Variablen**: Präfix `is`, `has`, `can`, `should` (`$isValid`, `$hasAccess`).
+  - **Sammlungen/Listen**: Pluralform, camelCase (`$logEntries`, nicht `$arrLogs`).
+  - **Private Variablen in Modulen**: camelCase, optional mit `_`-Präfix zur Abgrenzung von öffentlichen Werten.
+  - **Konstanten**: PascalCase oder UPPER_CASE für zentrale/unveränderliche Werte (`$DefaultTimeout`, `$MAX_RETRIES`).
+  - **Keine ungarische Notation**: Kein Typ-Präfix im Namen (`$strName` vermeiden) – stattdessen `[string]$name`, falls der Typ betont werden soll.
+  - **Keine kryptischen Kürzel**: Nur etablierte Akronyme (`ID`, `URL`, `VM`, `IP`) verwenden, sonst ausschreiben (`$configPath` statt `$cfgPath`).
 - **PSTypeName**: `ps-script-machine.<FunctionName>` für Ergebnisobjekte.
+
+### 4.1 Formatierung und Stil
+
+- **Einrückung**: 4 Leerzeichen pro Ebene, keine Tabs (bzw. Tab auf 4 Leerzeichen konfiguriert).
+- **Klammerung**: Öffnende `{` bleibt in derselben Zeile wie Funktions-/Kontrollstrukturkopf, schließende `}` auf eigener Zeile.
+- **Immer Klammern verwenden**, auch bei Einzeilern (`if ($x) { ... }` statt `if ($x) Do-Something`).
+- **Leerzeichen**: Vor/nach Operatoren (`=`, `-eq`, `-and`, `+=`), nach Kommas in Parameterlisten/Arrays, nach Schlüsselwörtern (`if`, `foreach`, `function`).
+- **`$_` vs. `foreach`**: `$_` nur in einfachen, kurzen Pipelines. Bei mehrzeiliger oder verschachtelter Logik `foreach ($item in $collection)` verwenden.
+- **Frühzeitige Rückgabe**: Tiefe Verschachtelung durch `return` oder Auslagerung in Funktionen vermeiden.
+
+### 4.2 Kommentare
+
+- Kommentiere nur, wo der Code nicht selbsterklärend ist oder eine besondere Logik/ein Workaround vorliegt.
+- Einzeiler: `#` oberhalb oder rechts neben der Zeile. Mehrzeilig: `<# ... #>`.
+- Der Comment-Based-Help-Header (siehe §5) steht direkt vor der Funktion, ohne Leerzeile dazwischen.
 
 ## 5. PowerShell-Standards
 
