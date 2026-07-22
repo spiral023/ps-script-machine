@@ -67,12 +67,7 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string]
-    $NewValue,
-
-    [Parameter(Mandatory = $false)]
-    [ValidateNotNullOrEmpty()]
-    [string]
-    $LogFile
+    $NewValue
 )
 
 $ErrorActionPreference = 'Stop'
