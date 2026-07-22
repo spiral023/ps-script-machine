@@ -115,9 +115,11 @@ Reference these guidelines when:
 ## How to Use
 
 Every rule listed above is documented in full in the compiled guide
-`AGENTS.md` (in this skill directory). Look a rule up there by its prefix
-(e.g. `security-`, `error-`, `state-`) when you need the detailed
-explanation and code samples.
+`references/powercli-rules.md` (in this skill directory — not to be
+confused with the repository-root `AGENTS.md`, which holds this
+project's mandates). Look a rule up there by its prefix (e.g.
+`security-`, `error-`, `state-`) when you need the detailed explanation
+and code samples.
 
 Each rule entry contains:
 - Brief explanation of why it matters

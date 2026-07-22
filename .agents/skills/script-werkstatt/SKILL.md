@@ -19,7 +19,10 @@ deutschen Beschreibung zu einem fertigen, getesteten PowerCLI-Skript.
    Niemals nach Parametertypen, Funktionen oder Code-Details fragen.
    Der Admin muss zu keinem Zeitpunkt Code lesen.
 2. **Alle Standards aus AGENTS.md gelten unverändert** (Tests, Coverage,
-   Sicherheit, Comment-Based Help, Definition of Done).
+   Sicherheit, Comment-Based Help, Definition of Done). Für das *Warum*
+   und *Wie* dahinter (Fehlerbehandlung, Verbindungsverwaltung, Tests,
+   State-Change, modulare Architektur) gilt zusätzlich der Skill
+   `vmware-powercli-scripts` - bei Zweifeln in Phase 4/5 dort nachschlagen.
 3. **Read-only vs. verändernd sauber trennen.** Bei verändernden Skripten
    sind die Sicherheitsfragen (Phase 2) verpflichtend und das Skript
    bekommt SupportsShouldProcess gemäß templates/ChangeScript.ps1.
