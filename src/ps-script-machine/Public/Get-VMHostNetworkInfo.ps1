@@ -77,10 +77,10 @@ function Get-VMHostNetworkInfo {
         # Hosts abfragen (gefiltert nach Cluster oder VMHost-Parameter)
         $vmHostParams = @{}
         if ($VMHost) {
-            $vmHostParams['Name'] = $VMHost 
+            $vmHostParams['Name'] = $VMHost
         }
         if ($Cluster) {
-            $vmHostParams['Location'] = (Get-Cluster -Name $Cluster) 
+            $vmHostParams['Location'] = (Get-Cluster -Name $Cluster)
         }
 
         $vmHosts = Get-VMHost @vmHostParams | Sort-Object Name
@@ -170,52 +170,52 @@ function Get-VMHostNetworkInfo {
                     $cdpAvailable = $null -ne $cdp
 
                     $cdpDeviceId = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.DevId 
+                        ConvertTo-CleanText $cdp.DevId
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpPortId = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.PortId 
+                        ConvertTo-CleanText $cdp.PortId
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpMgmtAddr = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.MgmtAddr 
+                        ConvertTo-CleanText $cdp.MgmtAddr
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpAddress = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Address 
+                        ConvertTo-CleanText $cdp.Address
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpHardwarePlatform = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.HardwarePlatform 
+                        ConvertTo-CleanText $cdp.HardwarePlatform
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpSoftwareVersion = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.SoftwareVersion 
+                        ConvertTo-CleanText $cdp.SoftwareVersion
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpVlan = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Vlan 
+                        ConvertTo-CleanText $cdp.Vlan
                     }
                     else {
-                        "" 
+                        ""
                     }
                     $cdpMtu = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Mtu 
+                        ConvertTo-CleanText $cdp.Mtu
                     }
                     else {
-                        "" 
+                        ""
                     }
 
                     $results.Add([PSCustomObject]@{
@@ -225,10 +225,10 @@ function Get-VMHostNetworkInfo {
                             HostConnectionState = $currentHost.ConnectionState
                             PhysicalAdapter     = $adapter.Name
                             LinkStatus          = if ($adapter.BitRatePerSec -gt 0) {
-                                "Up" 
+                                "Up"
                             }
                             else {
-                                "Down" 
+                                "Down"
                             }
                             MACAddress          = $adapter.Mac
                             CDPDeviceID         = $cdpDeviceId
@@ -241,10 +241,10 @@ function Get-VMHostNetworkInfo {
                             CDPMTU              = $cdpMtu
                             CDPAvailable        = $cdpAvailable
                             QueryStatus         = if ($cdpAvailable) {
-                                "CDP-Daten gefunden" 
+                                "CDP-Daten gefunden"
                             }
                             else {
-                                "Keine CDP-Daten" 
+                                "Keine CDP-Daten"
                             }
                             ErrorMessage        = ""
                             CollectionTime      = (Get-Date)

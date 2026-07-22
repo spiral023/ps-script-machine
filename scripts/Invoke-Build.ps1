@@ -154,6 +154,20 @@ $taskActions = [ordered]@{
         else {
             Write-Host "  No issues found."
         }
+
+        # Informational only - not a CI gate. Some external pipelines (e.g. the
+        # GitLab CI/CD component running against generated standalone scripts)
+        # invoke PSScriptAnalyzer with default settings, which also surfaces
+        # Information-severity findings (like PSAvoidTrailingWhitespace) that
+        # our strict Error/Warning-only settings hide locally. Surfacing them
+        # here closes that gap without turning them into a build failure -
+        # see docs/ARCHITECTURE.md "PSScriptAnalyzer Scope" for why this repo
+        # does not enforce a zero-Information-warning gate.
+        $infoResults = Invoke-ScriptAnalyzer -Path $srcPath -Settings $analyzerSettings -Severity Information -Recurse
+        if ($infoResults) {
+            Write-Host "  Information (non-blocking, would be reported by external default-severity scanners):"
+            $infoResults | Format-Table Severity, RuleName, ScriptName, Line, Message -AutoSize
+        }
     }
 
     Test = {

@@ -48,16 +48,16 @@ function Disconnect-VIServerSession {
 
     # Determine the session key for tracking lookup
     $serverName = if ($Connection.Name) {
-        $Connection.Name 
+        $Connection.Name
     }
     else {
-        [string]$Connection 
+        [string]$Connection
     }
     $sessionId = if ($Connection.SessionId) {
-        $Connection.SessionId 
+        $Connection.SessionId
     }
     else {
-        '' 
+        ''
     }
     $sessionKey = "${serverName}:${sessionId}"
 

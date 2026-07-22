@@ -140,13 +140,13 @@ function Get-CdpNetworkInfo {
 
                                 # Extract the VIServer name - if it's a VIServer object, use .Name
                                 $viserverName = if ($server -is [string]) {
-                                    $server 
+                                    $server
                                 }
                                 elseif ($server.Name) {
-                                    $server.Name 
+                                    $server.Name
                                 }
                                 else {
-                                    [string]$server 
+                                    [string]$server
                                 }
 
                                 $result = [PSCustomObject]@{
