@@ -129,6 +129,22 @@ PowerShell 7.4+ and PowerCLI - no repository required:
 .\scripts\Invoke-Build.ps1 -CodeCoverageThreshold 90
 ```
 
+## Quality Gates
+
+`AGENTS.md` is the authoritative source for all thresholds and standards below — this section only summarizes what the automated build enforces:
+
+- **PSScriptAnalyzer**: `src/ps-script-machine/` (the module's public/private code) must have **zero Error/Warning-level findings** (`PSScriptAnalyzerSettings.psd1`). `scripts/`, `templates/`, and `examples/` are deliberately out of this strict scope (interactive console tooling that legitimately uses `Write-Host`, `Read-Host`, `Format-Table`) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Code coverage**: minimum **80%**, measured by Pester 5 (`-CodeCoverageThreshold`).
+- **Definition of Done**: every public function must satisfy the full checklist in `AGENTS.md` §11 — comment-based help, validated parameters, structured `PSCustomObject` results, `-WhatIf`/`-Confirm` for modifying functions, and more.
+- **Secret scan**: the build fails if hardcoded credentials or secrets are detected.
+- **Formatting**: `.editorconfig` (4-space indentation, trimmed trailing whitespace) keeps local edits consistent with what external scanners (PSScriptAnalyzer default severity, SonarQube) would otherwise flag.
+
+Run all gates locally before pushing:
+
+```powershell
+.\scripts\Invoke-Build.ps1 -CI
+```
+
 ## Usage by Coding Agents
 
 Coding agents should read `AGENTS.md` for the central rule base.
