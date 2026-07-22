@@ -88,6 +88,7 @@ if (-not $script:powerCLIModuleLoaded) {
         param(
             [object]$VMHost,
             [switch]$Physical,
+            [object]$Server,
             [string]$ErrorAction
         )
     }
@@ -95,6 +96,7 @@ if (-not $script:powerCLIModuleLoaded) {
     function global:Get-View {
         param(
             [string]$Id,
+            [object]$Server,
             [string]$ErrorAction
         )
     }

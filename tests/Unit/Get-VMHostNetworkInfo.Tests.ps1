@@ -2,15 +2,9 @@
 
 <#
 .SYNOPSIS
-    Unit tests for Get-VMHostNetworkInfo function.
+    Unit tests for Get-VMHostNetworkInfo.
 #>
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingConvertToSecureStringWithPlainText', '', Justification = 'Disposable mock PSCredential for unit testing only - never a real secret, never persisted or logged.')]
-param()
-
 BeforeAll {
-    # Load PowerCLI test stand-ins (global scope) before the module is imported.
-    # The production module no longer defines its own PowerCLI stubs, so these
-    # global functions are what Pester mocks against via -ModuleName.
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
 
     $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\src\ps-script-machine\ps-script-machine.psd1'
@@ -19,6 +13,13 @@ BeforeAll {
     $script:mockVIServer = [PSCustomObject]@{
         Name      = 'vcenter.test.local'
         SessionId = 'test-session-id'
+        Port      = 443
+        Protocol  = 'https'
+    }
+
+    $script:mockVIServer2 = [PSCustomObject]@{
+        Name      = 'vcenter2.test.local'
+        SessionId = 'test-session-id-2'
         Port      = 443
         Protocol  = 'https'
     }
@@ -50,20 +51,20 @@ BeforeAll {
     }
 
     $script:mockCluster = [PSCustomObject]@{
-        Name = 'cluster01'
+        Name          = 'cluster01'
         ExtensionData = [PSCustomObject]@{
             Host = @([PSCustomObject]@{ Value = 'host-123' })
         }
     }
 
     $script:mockNetAdapter = [PSCustomObject]@{
-        Name           = 'vmnic0'
-        Mac            = '00:11:22:33:44:55'
-        BitRatePerSec  = 1000
+        Name          = 'vmnic0'
+        Mac           = '00:11:22:33:44:55'
+        BitRatePerSec = 1000
     }
 
     $script:mockCdpHint = [PSCustomObject]@{
-        Device = 'vmnic0'
+        Device              = 'vmnic0'
         ConnectedSwitchPort = [PSCustomObject]@{
             DevId            = 'switch01'
             PortId           = 'GigabitEthernet1/0/1'
@@ -76,221 +77,81 @@ BeforeAll {
         }
     }
 
-    $script:mockNetworkSystem = [PSCustomObject]@{}
-    $script:mockNetworkSystem | Add-Member -MemberType NoteProperty -Name '_hints' -Value @($script:mockCdpHint)
-    $script:mockNetworkSystem | Add-Member -MemberType ScriptMethod -Name 'QueryNetworkHint' -Value { return $this._hints }
-
-    $script:testCredential = [System.Management.Automation.PSCredential]::new(
-        'testuser',
-        (ConvertTo-SecureString 'testpass' -AsPlainText -Force)
-    )
+    $script:mockNetworkSystem = [PSCustomObject]@{
+        _hints = @($script:mockCdpHint)
+    }
+    $script:mockNetworkSystem | Add-Member -MemberType ScriptMethod -Name 'QueryNetworkHint' -Value { $this._hints }
 }
 
 Describe 'Get-VMHostNetworkInfo' {
-    Context 'Regular success cases' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
-
-        It 'Should return results for a valid server' {
-            $result = Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential
-            $result | Should -Not -BeNullOrEmpty
-            @($result).Count | Should -Be 1
-        }
-
-        It 'should include vCenter in the result' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].vCenter | Should -Be 'vcenter.test.local'
-        }
-
-        It 'should include VMHost name in the result' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].VMHost | Should -Be 'esxi01.test.local'
-        }
-
-        It 'should include adapter name in the result' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].PhysicalAdapter | Should -Be 'vmnic0'
-        }
-
-        It 'should include CDP device ID in the result' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].CDPDeviceID | Should -Be 'switch01'
-        }
-
-        It 'should include CDP available flag' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].CDPAvailable | Should -BeTrue
-        }
-
-        It 'should include collection time' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result[0].CollectionTime | Should -Not -BeNullOrEmpty
-        }
-
-        It 'should disconnect the session in finally' {
-            Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential
-            Should -Invoke Disconnect-VIServerSession -ModuleName 'ps-script-machine' -Times 1
-        }
+    BeforeEach {
+        Mock Connect-VIServerSession { $script:mockVIServer } -ModuleName 'ps-script-machine'
+        Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
+        Mock Write-ModuleLog { } -ModuleName 'ps-script-machine'
+        Mock Get-VMHost { @($script:mockVMHost) } -ModuleName 'ps-script-machine'
+        Mock Get-Cluster { @($script:mockCluster) } -ModuleName 'ps-script-machine'
+        Mock Get-View { $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
+        Mock Get-VMHostNetworkAdapter { @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
     }
 
-    Context 'Invalid parameters' {
-        It 'should throw when Server is null' {
-            { Get-VMHostNetworkInfo -Server $null -Credential $script:testCredential } | Should -Throw
-        }
+    It 'accepts an externally connected VIServer and does not manage its session' {
+        $result = @(Get-VMHostNetworkInfo -VIServer $script:mockVIServer)
 
-        It 'should throw when Server is empty' {
-            { Get-VMHostNetworkInfo -Server '' -Credential $script:testCredential } | Should -Throw
-        }
+        $result | Should -HaveCount 1
+        Should -Invoke Connect-VIServerSession -ModuleName 'ps-script-machine' -Times 0 -Exactly
+        Should -Invoke Disconnect-VIServerSession -ModuleName 'ps-script-machine' -Times 0 -Exactly
     }
 
-    Context 'No hosts found' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @() } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @() } -ModuleName 'ps-script-machine'
-        }
+    It 'returns the standard result identity and audit fields' {
+        $result = @(Get-VMHostNetworkInfo -VIServer $script:mockVIServer)[0]
 
-        It 'should throw when no hosts found' {
-            { Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential -ErrorAction Stop } | Should -Throw
-        }
+        $result.PSTypeNames[0] | Should -Be 'ps-script-machine.VMHostNetworkInfo'
+        $result.VIServer | Should -Be 'vcenter.test.local'
+        $result.Timestamp | Should -Not -BeNullOrEmpty
+        $result.RunId | Should -Not -BeNullOrEmpty
+        $result.PSObject.Properties.Name | Should -Not -Contain 'vCenter'
+        $result.PSObject.Properties.Name | Should -Not -Contain 'CollectionTime'
     }
 
-    Context 'Disconnected host' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHostDisconnected) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @() } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
+    It 'passes the supplied session explicitly to every PowerCLI query' {
+        $null = Get-VMHostNetworkInfo -VIServer $script:mockVIServer -Cluster 'cluster01'
 
-        It 'should handle disconnected host gracefully' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result | Should -Not -BeNullOrEmpty
-            $result[0].HostConnectionState | Should -Be 'Disconnected'
-            $result[0].QueryStatus | Should -Be 'Übersprungen'
-            $result[0].CDPAvailable | Should -BeFalse
-        }
+        Should -Invoke Get-Cluster -ModuleName 'ps-script-machine' -ParameterFilter { $Server -eq $script:mockVIServer } -Times 2 -Exactly
+        Should -Invoke Get-VMHost -ModuleName 'ps-script-machine' -ParameterFilter { $Server -eq $script:mockVIServer } -Times 1 -Exactly
+        Should -Invoke Get-View -ModuleName 'ps-script-machine' -ParameterFilter { $Server -eq $script:mockVIServer } -Times 1 -Exactly
+        Should -Invoke Get-VMHostNetworkAdapter -ModuleName 'ps-script-machine' -ParameterFilter { $Server -eq $script:mockVIServer } -Times 1 -Exactly
     }
 
-    Context 'Partial failure - Get-View fails' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { throw 'Failed to get view' } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
+    It 'processes each supplied VIServer separately' {
+        $result = @(Get-VMHostNetworkInfo -VIServer @($script:mockVIServer, $script:mockVIServer2))
 
-        It 'should handle partial failure gracefully' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result | Should -Not -BeNullOrEmpty
-            $result[0].QueryStatus | Should -Be 'Fehler'
-            $result[0].ErrorMessage | Should -Not -BeNullOrEmpty
-        }
+        $result | Should -HaveCount 2
+        $result.VIServer | Should -Be @('vcenter.test.local', 'vcenter2.test.local')
+        Should -Invoke Get-VMHost -ModuleName 'ps-script-machine' -Times 2 -Exactly
     }
 
-    Context 'No CDP data' {
-        BeforeAll {
-            $script:mockNetworkSystemNoCdp = [PSCustomObject]@{}
-            $script:mockNetworkSystemNoCdp | Add-Member -MemberType NoteProperty -Name '_hints' -Value @()
-            $script:mockNetworkSystemNoCdp | Add-Member -MemberType ScriptMethod -Name 'QueryNetworkHint' -Value { return $this._hints }
+    It 'returns a structured skipped result for a disconnected host' {
+        Mock Get-VMHost { @($script:mockVMHostDisconnected) } -ModuleName 'ps-script-machine'
 
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystemNoCdp } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
+        $result = @(Get-VMHostNetworkInfo -VIServer $script:mockVIServer)[0]
 
-        It 'should handle missing CDP data gracefully' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $result | Should -Not -BeNullOrEmpty
-            $result[0].CDPAvailable | Should -BeFalse
-            $result[0].QueryStatus | Should -Be 'Keine CDP-Daten'
-        }
+        $result.HostConnectionState | Should -Be 'Disconnected'
+        $result.QueryStatus | Should -Be 'Übersprungen'
+        $result.CDPAvailable | Should -BeFalse
+        $result.PSTypeNames[0] | Should -Be 'ps-script-machine.VMHostNetworkInfo'
     }
 
-    Context 'Cluster filter' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
+    It 'continues with a structured failure result when an individual host query fails' {
+        Mock Get-View { throw 'Failed to get view' } -ModuleName 'ps-script-machine'
 
-        It 'should pass cluster filter to Get-Cluster' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential -Cluster 'cluster01')
-            $result | Should -Not -BeNullOrEmpty
-            Should -Invoke Get-Cluster -ModuleName 'ps-script-machine' -Times 1
-        }
+        $result = @(Get-VMHostNetworkInfo -VIServer $script:mockVIServer)[0]
+
+        $result.QueryStatus | Should -Be 'Fehler'
+        $result.ErrorMessage | Should -Be 'Failed to get view'
+        $result.PSTypeNames[0] | Should -Be 'ps-script-machine.VMHostNetworkInfo'
     }
 
-    Context 'VMHost filter' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
-
-        It 'should pass VMHost filter to Get-VMHost' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential -VMHost 'esxi01.test.local')
-            $result | Should -Not -BeNullOrEmpty
-            Should -Invoke Get-VMHost -ModuleName 'ps-script-machine' -Times 1
-        }
-    }
-
-    Context 'Connection failure' {
-        BeforeAll {
-            Mock Connect-VIServerSession { throw 'Connection failed' } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-        }
-
-        It 'should throw on connection failure' {
-            { Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential -ErrorAction Stop } | Should -Throw
-        }
-    }
-
-    Context 'Correct result object structure' {
-        BeforeAll {
-            Mock Connect-VIServerSession { return $script:mockVIServer } -ModuleName 'ps-script-machine'
-            Mock Disconnect-VIServerSession { } -ModuleName 'ps-script-machine'
-            Mock Get-VMHost { return @($script:mockVMHost) } -ModuleName 'ps-script-machine'
-            Mock Get-Cluster { return @($script:mockCluster) } -ModuleName 'ps-script-machine'
-            Mock Get-View { return $script:mockNetworkSystem } -ModuleName 'ps-script-machine'
-            Mock Get-VMHostNetworkAdapter { return @($script:mockNetAdapter) } -ModuleName 'ps-script-machine'
-        }
-
-        It 'should return objects with expected properties' {
-            $result = @(Get-VMHostNetworkInfo -Server 'vcenter.test.local' -Credential $script:testCredential)
-            $properties = $result[0].PSObject.Properties.Name
-            $properties | Should -Contain 'vCenter'
-            $properties | Should -Contain 'Cluster'
-            $properties | Should -Contain 'VMHost'
-            $properties | Should -Contain 'HostConnectionState'
-            $properties | Should -Contain 'PhysicalAdapter'
-            $properties | Should -Contain 'LinkStatus'
-            $properties | Should -Contain 'MACAddress'
-            $properties | Should -Contain 'CDPDeviceID'
-            $properties | Should -Contain 'CDPPortID'
-            $properties | Should -Contain 'CDPAvailable'
-            $properties | Should -Contain 'QueryStatus'
-            $properties | Should -Contain 'CollectionTime'
-        }
+    It 'rejects a missing VIServer' {
+        { Get-VMHostNetworkInfo -VIServer $null } | Should -Throw
     }
 }

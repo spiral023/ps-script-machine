@@ -1,306 +1,314 @@
+#Requires -Version 7.4
+
 <#
 .SYNOPSIS
-    Liest CDP-Informationen aller physischen Netzwerkadapter von ESXi-Hosten aus.
+    Retrieves CDP information for the physical network adapters of ESXi hosts.
 
 .DESCRIPTION
-    - Verbindet sich per PowerCLI mit einem vCenter.
-    - Liest alle ESXi-Hosts (oder eine Teilmenge) aus.
-    - Ruft Network-Hints (CDP/LLDP) für alle physischen Adapter ab.
-    - Gibt strukturierte PSCustomObject-Ergebnisse zurück.
-    - Führt ausschließlich Leseoperationen durch (read-only).
+    Queries all ESXi hosts, or a filtered subset, on one or more existing vCenter
+    sessions. The function does not create or close VIServer sessions. It retrieves
+    network hints (CDP/LLDP) for physical adapters and returns structured results.
 
-.PARAMETER Server
-    FQDN oder IP-Adresse des vCenter-Servers.
+    This function is read-only and explicitly passes each VIServer session to every
+    PowerCLI cmdlet, so it does not rely on a global default connection.
 
-.PARAMETER Credential
-    PSCredential-Objekt für die vCenter-Anmeldung.
+.PARAMETER VIServer
+    One or more already connected VMware VIServer sessions. Create sessions outside
+    this function, for example with Connect-MultiVIServer.
 
 .PARAMETER VMHost
-    Optional: Nur diese Hosts abfragen (Standard: alle).
+    Optional. Restricts the query to these ESXi host names.
 
 .PARAMETER Cluster
-    Optional: Nur Hosts aus diesen Clustern abfragen.
+    Optional. Restricts the query to hosts in these cluster names.
 
 .EXAMPLE
-    $cred = Get-Credential -Message "vCenter-Anmeldung"
-    Get-VMHostNetworkInfo -Server "vcenter.local" -Credential $cred
+    $connection = Connect-MultiVIServer -Server 'vcenter.example.com' -Credential $credential
+    Get-VMHostNetworkInfo -VIServer $connection.Sessions
+
+    Retrieves physical adapter CDP information from all hosts on the supplied
+    vCenter session.
 
 .EXAMPLE
-    Get-VMHostNetworkInfo -Server "vcenter.local" -Credential $cred -Cluster "Prod"
+    Get-VMHostNetworkInfo -VIServer $connection.Sessions -Cluster 'Production'
 
-.EXAMPLE
-    $results = Get-VMHostNetworkInfo -Server "vcenter.local" -Credential $cred
-    $results | Export-ReportCsv -Path "C:\Reports\cdp.csv"
-    $results | Export-ReportJson -Path "C:\Reports\cdp.json"
+    Retrieves physical adapter CDP information for the hosts in the Production
+    cluster.
+
+.INPUTS
+    VMware.VimAutomation.ViCore.Types.V1.VIServer.VIServer[]
 
 .OUTPUTS
-    PSCustomObject - Strukturierte CDP-Netzwerkinformationen pro physischem Adapter.
+    ps-script-machine.VMHostNetworkInfo
+    A structured result for each physical adapter, skipped host, or host query error.
 
 .NOTES
-    Author: VMware Admin Team
-    Requirements: VMware PowerCLI 12+ / VCF PowerCLI 9+
-    Die Funktion führt ausschließlich Leseoperationen durch.
+    Required vSphere permissions:
+    - System.Read
+    - Host.Config.Network
+
+    The function is read-only and does not modify or disconnect caller-owned sessions.
+
+.LINK
+    https://github.com/spiral023/ps-script-machine
 #>
 function Get-VMHostNetworkInfo {
     [CmdletBinding()]
-    [OutputType([PSCustomObject])]
-    param (
-        [Parameter(Mandatory)]
+    [OutputType([PSCustomObject[]])]
+    param(
+        [Parameter(
+            Mandatory = $true,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true,
+            Position = 0
+        )]
         [ValidateNotNullOrEmpty()]
-        [string]$Server,
+        [object[]]
+        $VIServer,
 
-        [Parameter(Mandatory)]
-        [PSCredential]$Credential,
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]
+        $VMHost,
 
-        [Parameter()]
-        [string[]]$VMHost,
-
-        [Parameter()]
-        [string[]]$Cluster
+        [Parameter(Mandatory = $false)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]
+        $Cluster
     )
 
-    $ErrorActionPreference = "Stop"
-    Set-StrictMode -Version Latest
+    begin {
+        $results = [System.Collections.Generic.List[PSCustomObject]]::new()
+    }
 
-    $viConnection = $null
-    $results = [System.Collections.Generic.List[object]]::new()
-
-    try {
-        Write-ScriptLog -Message "Verbinde mit vCenter $Server ..." -Level INFO
-
-        $viConnection = Connect-VIServerSession `
-            -Server $Server `
-            -Credential $Credential
-
-        Write-ScriptLog -Message "Verbindung erfolgreich hergestellt." -Level INFO
-
-        # Hosts abfragen (gefiltert nach Cluster oder VMHost-Parameter)
-        $vmHostParams = @{}
-        if ($VMHost) {
-            $vmHostParams['Name'] = $VMHost
-        }
-        if ($Cluster) {
-            $vmHostParams['Location'] = (Get-Cluster -Name $Cluster)
-        }
-
-        $vmHosts = Get-VMHost @vmHostParams | Sort-Object Name
-
-        if (-not $vmHosts -or $vmHosts.Count -eq 0) {
-            throw "Im vCenter wurden keine ESXi-Hosts gefunden."
-        }
-
-        Write-ScriptLog -Message "$($vmHosts.Count) ESXi-Host(s) gefunden." -Level INFO
-
-        # Cluster-Lookup für effiziente Zuordnung (Bulk-Query)
-        $allClusters = Get-Cluster
-        $clusterLookup = @{}
-        foreach ($c in $allClusters) {
-            foreach ($h in $c.ExtensionData.Host) {
-                $clusterLookup[$h.Value] = $c.Name
+    process {
+        foreach ($server in $VIServer) {
+            $serverName = if ($server.Name) {
+                [string]$server.Name
             }
-        }
-
-        $hostNumber = 0
-
-        foreach ($currentHost in $vmHosts) {
-            $hostNumber++
-
-            Write-Progress `
-                -Activity "CDP-Informationen werden ausgelesen" `
-                -Status "Host $hostNumber von $($vmHosts.Count): $($currentHost.Name)" `
-                -PercentComplete (($hostNumber / $vmHosts.Count) * 100)
-
-            Write-ScriptLog -Message "[$hostNumber/$($vmHosts.Count)] $($currentHost.Name)" -Level INFO
-
-            $clusterName = ""
-            if ($clusterLookup.ContainsKey($currentHost.Id)) {
-                $clusterName = $clusterLookup[$currentHost.Id]
-            }
-
-            # Bei nicht erreichbaren Hosts überspringen
-            if ($currentHost.ConnectionState -ne "Connected") {
-                $results.Add([PSCustomObject]@{
-                        vCenter             = $Server
-                        Cluster             = $clusterName
-                        VMHost              = $currentHost.Name
-                        HostConnectionState = $currentHost.ConnectionState
-                        PhysicalAdapter     = ""
-                        LinkStatus          = ""
-                        MACAddress          = ""
-                        CDPDeviceID         = ""
-                        CDPPortID           = ""
-                        CDPManagementIP     = ""
-                        CDPSwitchAddress    = ""
-                        CDPHardwarePlatform = ""
-                        CDPSoftwareVersion  = ""
-                        CDPNativeVLAN       = ""
-                        CDPMTU              = ""
-                        CDPAvailable        = $false
-                        QueryStatus         = "Übersprungen"
-                        ErrorMessage        = "ESXi-Host ist nicht verbunden."
-                        CollectionTime      = (Get-Date)
-                    })
-
-                Write-ScriptLog -Message "$($currentHost.Name) ist nicht verbunden, übersprungen." -Level WARNING
-                continue
+            else {
+                [string]$server
             }
 
             try {
-                $networkSystem = Get-View `
-                    -Id $currentHost.ExtensionData.ConfigManager.NetworkSystem `
-                    -ErrorAction Stop
+                Write-ModuleLog -Message 'Retrieving VMHost network information.' -Level Information -VIServer $serverName
 
-                $networkHints = $networkSystem.QueryNetworkHint([string[]]@())
-
-                $physicalAdapters = Get-VMHostNetworkAdapter `
-                    -VMHost $currentHost `
-                    -Physical `
-                    -ErrorAction Stop
-
-                foreach ($adapter in $physicalAdapters) {
-                    $hint = $networkHints |
-                        Where-Object { $_.Device -eq $adapter.Name } |
-                        Select-Object -First 1
-
-                    $cdp = $null
-                    if ($hint) {
-                        $cdp = $hint.ConnectedSwitchPort
-                    }
-
-                    $cdpAvailable = $null -ne $cdp
-
-                    $cdpDeviceId = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.DevId
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpPortId = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.PortId
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpMgmtAddr = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.MgmtAddr
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpAddress = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Address
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpHardwarePlatform = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.HardwarePlatform
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpSoftwareVersion = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.SoftwareVersion
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpVlan = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Vlan
-                    }
-                    else {
-                        ""
-                    }
-                    $cdpMtu = if ($cdpAvailable) {
-                        ConvertTo-CleanText $cdp.Mtu
-                    }
-                    else {
-                        ""
-                    }
-
-                    $results.Add([PSCustomObject]@{
-                            vCenter             = $Server
-                            Cluster             = $clusterName
-                            VMHost              = $currentHost.Name
-                            HostConnectionState = $currentHost.ConnectionState
-                            PhysicalAdapter     = $adapter.Name
-                            LinkStatus          = if ($adapter.BitRatePerSec -gt 0) {
-                                "Up"
-                            }
-                            else {
-                                "Down"
-                            }
-                            MACAddress          = $adapter.Mac
-                            CDPDeviceID         = $cdpDeviceId
-                            CDPPortID           = $cdpPortId
-                            CDPManagementIP     = $cdpMgmtAddr
-                            CDPSwitchAddress    = $cdpAddress
-                            CDPHardwarePlatform = $cdpHardwarePlatform
-                            CDPSoftwareVersion  = $cdpSoftwareVersion
-                            CDPNativeVLAN       = $cdpVlan
-                            CDPMTU              = $cdpMtu
-                            CDPAvailable        = $cdpAvailable
-                            QueryStatus         = if ($cdpAvailable) {
-                                "CDP-Daten gefunden"
-                            }
-                            else {
-                                "Keine CDP-Daten"
-                            }
-                            ErrorMessage        = ""
-                            CollectionTime      = (Get-Date)
-                        })
+                $vmHostParams = @{
+                    Server      = $server
+                    ErrorAction = 'Stop'
+                }
+                if ($VMHost) {
+                    $vmHostParams['Name'] = $VMHost
+                }
+                if ($Cluster) {
+                    $vmHostParams['Location'] = Get-Cluster -Name $Cluster -Server $server -ErrorAction Stop
                 }
 
-                Write-ScriptLog -Message "  $($physicalAdapters.Count) physische Adapter ausgelesen." -Level INFO
+                $vmHosts = @(Get-VMHost @vmHostParams | Sort-Object -Property Name)
+                if ($vmHosts.Count -eq 0) {
+                    Write-ModuleLog -Message 'No ESXi hosts were found.' -Level Warning -VIServer $serverName
+                    continue
+                }
+
+                $allClusters = @(Get-Cluster -Server $server -ErrorAction Stop)
+                $clusterLookup = @{}
+                foreach ($currentCluster in $allClusters) {
+                    foreach ($hostReference in $currentCluster.ExtensionData.Host) {
+                        $clusterLookup[$hostReference.Value] = $currentCluster.Name
+                    }
+                }
+
+                $hostNumber = 0
+                foreach ($currentHost in $vmHosts) {
+                    $hostNumber++
+                    Write-Progress `
+                        -Activity 'Retrieving VMHost network information' `
+                        -Status "Host $hostNumber of $($vmHosts.Count): $($currentHost.Name)" `
+                        -PercentComplete (($hostNumber / $vmHosts.Count) * 100)
+
+                    $clusterName = ''
+                    if ($clusterLookup.ContainsKey($currentHost.Id)) {
+                        $clusterName = $clusterLookup[$currentHost.Id]
+                    }
+
+                    if ($currentHost.ConnectionState -ne 'Connected') {
+                        $results.Add([PSCustomObject]@{
+                                PSTypeName         = 'ps-script-machine.VMHostNetworkInfo'
+                                VIServer           = $serverName
+                                Cluster            = $clusterName
+                                VMHost             = $currentHost.Name
+                                HostConnectionState = $currentHost.ConnectionState
+                                PhysicalAdapter     = ''
+                                LinkStatus          = ''
+                                MACAddress          = ''
+                                CDPDeviceID         = ''
+                                CDPPortID           = ''
+                                CDPManagementIP     = ''
+                                CDPSwitchAddress    = ''
+                                CDPHardwarePlatform = ''
+                                CDPSoftwareVersion  = ''
+                                CDPNativeVLAN       = ''
+                                CDPMTU              = ''
+                                CDPAvailable        = $false
+                                QueryStatus         = 'Übersprungen'
+                                ErrorMessage        = 'ESXi host is not connected.'
+                                Timestamp           = Get-Date
+                                RunId               = $script:LogRunId
+                            })
+                        Write-ModuleLog -Message 'ESXi host is not connected; query skipped.' -Level Warning -VIServer $serverName -Resource $currentHost.Name
+                        continue
+                    }
+
+                    try {
+                        $networkSystem = Get-View `
+                            -Id $currentHost.ExtensionData.ConfigManager.NetworkSystem `
+                            -Server $server `
+                            -ErrorAction Stop
+                        $networkHints = $networkSystem.QueryNetworkHint([string[]]@())
+                        $physicalAdapters = @(Get-VMHostNetworkAdapter `
+                                -VMHost $currentHost `
+                                -Physical `
+                                -Server $server `
+                                -ErrorAction Stop)
+
+                        foreach ($adapter in $physicalAdapters) {
+                            $hint = $networkHints |
+                                Where-Object { $_.Device -eq $adapter.Name } |
+                                Select-Object -First 1
+                            $cdp = if ($hint) {
+                                $hint.ConnectedSwitchPort
+                            }
+                            else {
+                                $null
+                            }
+                            $cdpAvailable = $null -ne $cdp
+                            $linkStatus = if ($adapter.BitRatePerSec -gt 0) {
+                                'Up'
+                            }
+                            else {
+                                'Down'
+                            }
+                            $cdpDeviceId = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.DevId
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpPortId = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.PortId
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpManagementIp = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.MgmtAddr
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpSwitchAddress = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.Address
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpHardwarePlatform = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.HardwarePlatform
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpSoftwareVersion = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.SoftwareVersion
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpNativeVlan = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.Vlan
+                            }
+                            else {
+                                ''
+                            }
+                            $cdpMtu = if ($cdpAvailable) {
+                                ConvertTo-CleanText $cdp.Mtu
+                            }
+                            else {
+                                ''
+                            }
+                            $queryStatus = if ($cdpAvailable) {
+                                'CDP data found'
+                            }
+                            else {
+                                'No CDP data'
+                            }
+
+                            $results.Add([PSCustomObject]@{
+                                    PSTypeName         = 'ps-script-machine.VMHostNetworkInfo'
+                                    VIServer           = $serverName
+                                    Cluster            = $clusterName
+                                    VMHost             = $currentHost.Name
+                                    HostConnectionState = $currentHost.ConnectionState
+                                    PhysicalAdapter     = $adapter.Name
+                                    LinkStatus          = $linkStatus
+                                    MACAddress          = $adapter.Mac
+                                    CDPDeviceID         = $cdpDeviceId
+                                    CDPPortID           = $cdpPortId
+                                    CDPManagementIP     = $cdpManagementIp
+                                    CDPSwitchAddress    = $cdpSwitchAddress
+                                    CDPHardwarePlatform = $cdpHardwarePlatform
+                                    CDPSoftwareVersion  = $cdpSoftwareVersion
+                                    CDPNativeVLAN       = $cdpNativeVlan
+                                    CDPMTU              = $cdpMtu
+                                    CDPAvailable        = $cdpAvailable
+                                    QueryStatus         = $queryStatus
+                                    ErrorMessage        = ''
+                                    Timestamp           = Get-Date
+                                    RunId               = $script:LogRunId
+                                })
+                        }
+
+                        Write-ModuleLog -Message 'Physical network adapters retrieved.' -Level Information -VIServer $serverName -Resource $currentHost.Name -Data @{ AdapterCount = $physicalAdapters.Count }
+                    }
+                    catch {
+                        $errorMessage = $_.Exception.Message
+                        $results.Add([PSCustomObject]@{
+                                PSTypeName         = 'ps-script-machine.VMHostNetworkInfo'
+                                VIServer           = $serverName
+                                Cluster            = $clusterName
+                                VMHost             = $currentHost.Name
+                                HostConnectionState = $currentHost.ConnectionState
+                                PhysicalAdapter     = ''
+                                LinkStatus          = ''
+                                MACAddress          = ''
+                                CDPDeviceID         = ''
+                                CDPPortID           = ''
+                                CDPManagementIP     = ''
+                                CDPSwitchAddress    = ''
+                                CDPHardwarePlatform = ''
+                                CDPSoftwareVersion  = ''
+                                CDPNativeVLAN       = ''
+                                CDPMTU              = ''
+                                CDPAvailable        = $false
+                                QueryStatus         = 'Fehler'
+                                ErrorMessage        = $errorMessage
+                                Timestamp           = Get-Date
+                                RunId               = $script:LogRunId
+                            })
+                        Write-ModuleLog -Message 'VMHost network query failed.' -Level Warning -VIServer $serverName -Resource $currentHost.Name -Data @{ Error = $errorMessage }
+                    }
+                }
             }
             catch {
-                $errorMessage = $_.Exception.Message
-
-                $results.Add([PSCustomObject]@{
-                        vCenter             = $Server
-                        Cluster             = $clusterName
-                        VMHost              = $currentHost.Name
-                        HostConnectionState = $currentHost.ConnectionState
-                        PhysicalAdapter     = ""
-                        LinkStatus          = ""
-                        MACAddress          = ""
-                        CDPDeviceID         = ""
-                        CDPPortID           = ""
-                        CDPManagementIP     = ""
-                        CDPSwitchAddress    = ""
-                        CDPHardwarePlatform = ""
-                        CDPSoftwareVersion  = ""
-                        CDPNativeVLAN       = ""
-                        CDPMTU              = ""
-                        CDPAvailable        = $false
-                        QueryStatus         = "Fehler"
-                        ErrorMessage        = $errorMessage
-                        CollectionTime      = (Get-Date)
-                    })
-
-                Write-ScriptLog -Message "Abfrage für $($currentHost.Name) fehlgeschlagen: $errorMessage" -Level WARNING
+                Write-ModuleLog -Message 'VIServer query failed.' -Level Error -VIServer $serverName -Data @{ Error = $_.Exception.Message }
             }
         }
-
-        Write-Progress -Activity "CDP-Informationen werden ausgelesen" -Completed
-
-        if ($results.Count -eq 0) {
-            throw "Es wurden keine Ergebnisse erzeugt."
-        }
-
-        Write-ScriptLog -Message "Export erfolgreich. $($results.Count) Ergebnis(se)." -Level INFO
-
-        return $results
     }
-    catch {
-        Write-ScriptLog -Message "Skript fehlgeschlagen: $($_.Exception.Message)" -Level ERROR
-        throw
-    }
-    finally {
-        if ($viConnection) {
-            Write-ScriptLog -Message "Trenne vCenter-Verbindung ..." -Level INFO
-            Disconnect-VIServerSession -Connection $viConnection
-            Write-ScriptLog -Message "vCenter-Verbindung getrennt." -Level INFO
+
+    end {
+        Write-Progress -Activity 'Retrieving VMHost network information' -Completed
+        foreach ($result in $results) {
+            Write-Output $result
         }
     }
 }
