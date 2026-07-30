@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   structure.
 - Progressive-disclosure references for standalone runtime, CSV input,
   Language Mode, and PowerCLI execution.
+- Upload-ready `.skill` and `.zip` packages for the
+  PowerShell-Skript-Werkstatt Light skill.
 
 ### Changed
 
