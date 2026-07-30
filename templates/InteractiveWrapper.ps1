@@ -32,6 +32,15 @@
 .PARAMETER NonInteractive
     Keine Rückfragen; erfordert -VCenter und -Credential.
 
+.PARAMETER EnableTranscript
+    Erstellt zusätzlich zur strukturierten Laufzusammenfassung einen
+    vollständigen Konsolenmitschnitt. Dieser kann sensible Betriebsdaten
+    enthalten und muss vor einer Weitergabe geprüft werden.
+
+.PARAMETER LogRetentionDays
+    Entfernt ältere Logdateien dieses Tools aus dessen eigenem
+    Logverzeichnis. 0 deaktiviert die Bereinigung. Standard: 30 Tage.
+
 .EXAMPLE
     .\__TOOL_NAME__.ps1
 
@@ -45,6 +54,7 @@
 .NOTES
     Erstellt mit ps-script-machine (Skript-Werkstatt).
     Read-only: Dieses Skript verändert keine vSphere-Konfiguration.
+    Exitcodes: 0 = Erfolg/behandelter Teilerfolg, 1 = fataler Fehler.
 #>
 [CmdletBinding()]
 param(
@@ -69,107 +79,164 @@ param(
 
     [Parameter(Mandatory = $false)]
     [switch]
-    $NonInteractive
+    $NonInteractive,
+
+    [Parameter(Mandatory = $false)]
+    [switch]
+    $EnableTranscript,
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(0, 3650)]
+    [int]
+    $LogRetentionDays = 30
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-#region module-import
-# Dieser Block wird beim Standalone-Build entfernt - im Standalone-Skript
-# sind alle Modul-Funktionen direkt eingebettet.
-$modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\src\ps-script-machine\ps-script-machine.psd1'
-Import-Module -Name (Resolve-Path -Path $modulePath).Path -Force -ErrorAction Stop
-#endregion module-import
+function ConvertTo-RedactedLogText {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [AllowEmptyString()]
+        [string]
+        $Value
+    )
 
-# ============================================================================
-# PowerCLI-Verfügbarkeit prüfen (verständliche Anleitung statt kryptischem Fehler)
-# ============================================================================
-$powerCliAvailable = Get-Module -ListAvailable -Name 'VMware.VimAutomation.Core', 'VMware.PowerCLI' -ErrorAction SilentlyContinue
-if (-not $powerCliAvailable) {
-    Write-Host ''
-    Write-Host 'VMware PowerCLI ist auf diesem Computer nicht installiert.' -ForegroundColor Red
-    Write-Host 'Ohne PowerCLI kann keine Verbindung zu vCenter aufgebaut werden.'
-    Write-Host ''
-    Write-Host 'So installierst du PowerCLI (einmalig, ohne Adminrechte):' -ForegroundColor Cyan
-    Write-Host '  Install-Module VMware.PowerCLI -Scope CurrentUser'
-    Write-Host ''
-    Write-Host 'Danach dieses Skript einfach erneut starten.'
-    exit 1
-}
-
-# ============================================================================
-# Begrüßung
-# ============================================================================
-Write-Host ''
-Write-Host '=== __TOOL_NAME__ ===' -ForegroundColor Cyan
-Write-Host '__TOOL_SYNOPSIS__'
-
-# ============================================================================
-# Protokoll je Lauf (Spec §6: kann bei Problemen dem Team geschickt werden)
-# ============================================================================
-$logDir = Join-Path -Path $OutputPath -ChildPath 'logs'
-if (-not (Test-Path -LiteralPath $logDir)) {
-    $null = New-Item -Path $logDir -ItemType Directory -Force
-}
-$logFile = Join-Path -Path $logDir -ChildPath ('__TOOL_NAME___{0:yyyy-MM-dd_HH-mm-ss}.log' -f (Get-Date))
-Start-Transcript -Path $logFile | Out-Null
-Write-Host ("Protokoll dieses Laufs: {0}" -f $logFile) -ForegroundColor DarkGray
-
-# ============================================================================
-# Schritt 1: vCenter bestimmen
-# ============================================================================
-if (-not $VCenter -or $VCenter.Count -eq 0) {
-    if ($NonInteractive) {
-        throw 'Im nicht-interaktiven Modus muss -VCenter angegeben werden.'
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $Value
     }
-    # Im Repo liegt die Liste unter config/vcenters.json, beim verteilten
-    # Standalone-Skript im Benutzerprofil.
-    $repoConfigDir = Join-Path -Path $PSScriptRoot -ChildPath '..\..\config'
-    $inventoryPath = if (Test-Path -Path $repoConfigDir) {
-        Join-Path -Path $repoConfigDir -ChildPath 'vcenters.json'
+
+    $redactedValue = $Value
+    $redactedValue = $redactedValue -replace '(?i)(password|passwd|pwd|secret|token|api[_-]?key)\s*=\s*[^\s;]+', '$1=***REDACTED***'
+    $redactedValue = $redactedValue -replace '(?i)bearer\s+[A-Za-z0-9._-]+', 'Bearer ***REDACTED***'
+    return $redactedValue
+}
+
+$minimumPowerCLIVersion = [version]'13.2.0'
+$toolName = '__TOOL_NAME__'
+$toolVersion = 'development'
+$runId = [guid]::NewGuid().ToString()
+$startedAt = Get-Date
+$exitCode = 0
+$runStatus = 'Running'
+$fatalErrorMessage = $null
+$connection = $null
+$transcriptStarted = $false
+$transcriptPath = $null
+$summaryPath = $null
+$requestedCount = 0
+$connectedCount = 0
+$skippedCount = 0
+$files = @()
+$allResults = [System.Collections.Generic.List[object]]::new()
+
+try {
+    $logDir = Join-Path -Path $OutputPath -ChildPath 'logs'
+    if (-not (Test-Path -LiteralPath $logDir)) {
+        $null = New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop
+    }
+
+    if ($LogRetentionDays -gt 0) {
+        $retentionCutoff = (Get-Date).AddDays(-$LogRetentionDays)
+        $expiredLogFiles = @(
+            Get-ChildItem -LiteralPath $logDir -File -Filter "$toolName`_*" -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -lt $retentionCutoff }
+        )
+        foreach ($expiredLogFile in $expiredLogFiles) {
+            Remove-Item -LiteralPath $expiredLogFile.FullName -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $runStamp = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss-fff'
+    $summaryPath = Join-Path -Path $logDir -ChildPath ("{0}_{1}.run.json" -f $toolName, $runStamp)
+    if ($EnableTranscript) {
+        $transcriptPath = Join-Path -Path $logDir -ChildPath ("{0}_{1}.transcript.log" -f $toolName, $runStamp)
+        Start-Transcript -Path $transcriptPath -ErrorAction Stop | Out-Null
+        $transcriptStarted = $true
+    }
+
+    Write-Host ''
+    Write-Host "=== $toolName ===" -ForegroundColor Cyan
+    Write-Host '__TOOL_SYNOPSIS__'
+    Write-Host ("Run-ID: {0}" -f $runId) -ForegroundColor DarkGray
+    if ($transcriptStarted) {
+        Write-Host ("Transcript (vor Weitergabe prüfen): {0}" -f $transcriptPath) -ForegroundColor DarkGray
+    }
+
+    # PowerCLI-Abhängigkeit vor Modulimport und Verbindung prüfen.
+    $powerCliModules = @(
+        Get-Module -ListAvailable -Name 'VMware.PowerCLI', 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue |
+            Sort-Object Version -Descending
+    )
+    $powerCliModule = $powerCliModules |
+        Where-Object { $_.Version -ge $minimumPowerCLIVersion } |
+        Select-Object -First 1
+
+    if (-not $powerCliModule) {
+        $foundVersions = if ($powerCliModules.Count -gt 0) {
+            ($powerCliModules.Version | Sort-Object -Unique) -join ', '
+        }
+        else {
+            'keine'
+        }
+        throw "VMware PowerCLI $minimumPowerCLIVersion oder neuer wird benötigt. Gefunden: $foundVersions. Installation/Aktualisierung: Install-Module VMware.PowerCLI -Scope CurrentUser"
+    }
+
+    #region module-import
+    # Dieser Block wird beim Standalone-Build entfernt - im Standalone-Skript
+    # sind alle Modul-Funktionen direkt eingebettet.
+    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\..\src\ps-script-machine\ps-script-machine.psd1'
+    Import-Module -Name (Resolve-Path -LiteralPath $modulePath).Path -Force -ErrorAction Stop
+    #endregion module-import
+
+    $moduleVersionVariable = Get-Variable -Name ModuleVersion -Scope Script -ErrorAction SilentlyContinue
+    if ($moduleVersionVariable) {
+        $toolVersion = [string]$moduleVersionVariable.Value
     }
     else {
-        Join-Path -Path $HOME -ChildPath '.ps-script-machine\vcenters.json'
+        $loadedModule = Get-Module -Name 'ps-script-machine' -ErrorAction SilentlyContinue
+        if ($loadedModule) {
+            $toolVersion = [string]$loadedModule.Version
+        }
     }
-    $VCenter = Select-VIServerTarget -InventoryPath $inventoryPath
-}
 
-# ============================================================================
-# Schritt 2: Anmeldung (einmal für alle vCenter)
-# ============================================================================
-$connection = Connect-MultiVIServer -Server $VCenter -Credential $Credential -NonInteractive:$NonInteractive
-if ($connection.Sessions.Count -eq 0) {
-    Write-Host ''
-    Write-Host 'Es konnte zu keinem vCenter eine Verbindung aufgebaut werden - Abbruch.' -ForegroundColor Red
-    Write-Host 'Prüfe Servernamen und Zugangsdaten und starte das Skript erneut.'
-    try {
-        Stop-Transcript | Out-Null
+    # Schritt 1: vCenter bestimmen.
+    if (-not $VCenter -or $VCenter.Count -eq 0) {
+        if ($NonInteractive) {
+            throw 'Im nicht-interaktiven Modus muss -VCenter angegeben werden.'
+        }
+        $repoConfigDir = Join-Path -Path $PSScriptRoot -ChildPath '..\..\config'
+        $inventoryPath = if (Test-Path -LiteralPath $repoConfigDir) {
+            Join-Path -Path $repoConfigDir -ChildPath 'vcenters.json'
+        }
+        else {
+            $userProfile = [Environment]::GetFolderPath('UserProfile')
+            Join-Path -Path $userProfile -ChildPath '.ps-script-machine\vcenters.json'
+        }
+        $VCenter = Select-VIServerTarget -InventoryPath $inventoryPath
     }
-    catch {
-        # Transcript war nicht (mehr) aktiv - unkritisch.
+    $requestedCount = @($VCenter).Count
+
+    # Schritt 2: einmal anmelden und Sessions wiederverwenden.
+    $connection = Connect-MultiVIServer -Server $VCenter -Credential $Credential -NonInteractive:$NonInteractive
+    $connectedCount = @($connection.Connected).Count
+    $skippedCount = @($connection.Skipped).Count
+    if ($connection.RunId) {
+        $runId = [string]$connection.RunId
     }
-    exit 1
-}
+    if (@($connection.Sessions).Count -eq 0) {
+        throw 'Es konnte zu keinem vCenter eine Verbindung aufgebaut werden. Servernamen, Netzwerk und Zugangsdaten prüfen.'
+    }
 
-# ============================================================================
-# Schritt 3: Toolspezifische Fragen
-# ============================================================================
-#region tool-questions
-# __TOOL_QUESTIONS__
-# Hier stellt das generierte Skript seine fachlichen Fragen, z. B.:
-#   if (-not $NonInteractive -and -not $PSBoundParameters.ContainsKey('Format')) {
-#       $Format = Read-Host 'Ausgabeformat (CSV/JSON/beide) [CSV]'
-#       if ([string]::IsNullOrWhiteSpace($Format)) { $Format = 'CSV' }
-#   }
-# Regeln: Jede Frage hat einen Standardwert (Enter = Standard); Fragen nur,
-# wenn -not $NonInteractive und der Parameter nicht explizit gesetzt wurde.
-#endregion tool-questions
+    # Schritt 3: toolspezifische Fragen.
+    #region tool-questions
+    # __TOOL_QUESTIONS__
+    # Fragen nur interaktiv und nur für nicht explizit gesetzte Parameter.
+    # Jede Frage erhält einen Standardwert (Enter = Standard).
+    #endregion tool-questions
 
-# ============================================================================
-# Schritt 4 + 5: Ausführung, Export, Zusammenfassung
-# ============================================================================
-$allResults = [System.Collections.Generic.List[object]]::new()
-try {
+    # Schritt 4 + 5: Ausführung, Export und Zusammenfassung.
     $total = $connection.Sessions.Count
     $current = 0
     foreach ($session in $connection.Sessions) {
@@ -187,8 +254,6 @@ try {
             $allResults.AddRange(@($results))
         }
     }
-    Write-Progress -Activity '__TOOL_NAME__' -Completed
-
     if ($allResults.Count -eq 0) {
         Write-Host ''
         Write-Host 'Es wurden keine Daten gefunden.' -ForegroundColor Yellow
@@ -217,20 +282,77 @@ try {
             Write-Host ("  Datei              : {0}" -f $file)
         }
     }
+
+    $runStatus = if ($skippedCount -gt 0) { 'PartialSuccess' } else { 'Success' }
+}
+catch {
+    $exitCode = 1
+    $runStatus = 'Failed'
+    $fatalErrorMessage = ConvertTo-RedactedLogText -Value $_.Exception.Message
+    Write-Error -Message ("{0} fehlgeschlagen: {1}" -f $toolName, $fatalErrorMessage) -ErrorAction Continue
 }
 finally {
-    foreach ($session in $connection.Sessions) {
+    Write-Progress -Activity $toolName -Completed -ErrorAction SilentlyContinue
+
+    if ($connection) {
+        foreach ($session in @($connection.Sessions)) {
+            try {
+                Disconnect-VIServer -Server $session -Confirm:$false -ErrorAction SilentlyContinue
+            }
+            catch {
+                Write-Warning ("Die Verbindung zu '{0}' konnte nicht sauber getrennt werden." -f $session.Name)
+            }
+        }
+    }
+
+    $completedAt = Get-Date
+    $durationSeconds = [math]::Round(($completedAt - $startedAt).TotalSeconds, 3)
+    $runSummary = [ordered]@{
+        PSTypeName       = 'ps-script-machine.ToolRunSummary'
+        ToolName         = $toolName
+        ToolVersion      = $toolVersion
+        RunId            = $runId
+        StartedAtUtc     = $startedAt.ToUniversalTime().ToString('o')
+        CompletedAtUtc   = $completedAt.ToUniversalTime().ToString('o')
+        DurationSeconds  = $durationSeconds
+        Status           = $runStatus
+        ExitCode         = $exitCode
+        RequestedTargets = $requestedCount
+        ConnectedTargets = $connectedCount
+        SkippedTargets   = $skippedCount
+        ResultCount      = $allResults.Count
+        OutputFiles      = @($files)
+        ErrorMessage     = $fatalErrorMessage
+        TranscriptPath   = $transcriptPath
+    }
+
+    if ($summaryPath) {
         try {
-            Disconnect-VIServer -Server $session -Confirm:$false -ErrorAction SilentlyContinue
+            $runSummary |
+                ConvertTo-Json -Depth 5 |
+                Set-Content -LiteralPath $summaryPath -Encoding utf8 -ErrorAction Stop
         }
         catch {
-            Write-Warning ("Die Verbindung zu '{0}' konnte nicht sauber getrennt werden." -f $session.Name)
+            Write-Warning ("Laufzusammenfassung konnte nicht geschrieben werden: {0}" -f $_.Exception.Message)
         }
     }
-    try {
-        Stop-Transcript | Out-Null
+
+    Write-Host ''
+    Write-Host ("Laufstatus          : {0}" -f $runStatus)
+    Write-Host ("Exitcode            : {0}" -f $exitCode)
+    Write-Host ("Dauer               : {0:N3} Sekunden" -f $durationSeconds)
+    if ($summaryPath) {
+        Write-Host ("Laufzusammenfassung : {0}" -f $summaryPath)
     }
-    catch {
-        # Transcript war nicht (mehr) aktiv - unkritisch.
+
+    if ($transcriptStarted) {
+        try {
+            Stop-Transcript -ErrorAction Stop | Out-Null
+        }
+        catch {
+            Write-Warning ("Transcript konnte nicht sauber beendet werden: {0}" -f $_.Exception.Message)
+        }
     }
 }
+
+exit $exitCode

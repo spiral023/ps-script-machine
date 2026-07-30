@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Runtime contract for interactive and unattended wrappers covering
+  deployment account, launcher, working directory, dependency preflight,
+  exit codes, cleanup, run summaries, optional transcripts, and scoped log
+  retention.
+- Contract tests for wrapper syntax, lifecycle, PowerCLI minimum version,
+  change-operation `-WhatIf`/`-Confirm` forwarding, and skill reference
+  structure.
+- Progressive-disclosure references for standalone runtime, CSV input,
+  Language Mode, and PowerCLI execution.
+
+### Changed
+
+- Refactored wrapper templates and `Export-CdpInformation.ps1` to use the
+  public `Connect-MultiVIServer` API, a single outer lifecycle, one final
+  process exit, PowerCLI 13.2.0 preflight, and structured run summaries.
+- Made full transcripts opt-in and documented them as potentially sensitive.
+- Reduced the PowerShell-Skript-Werkstatt Light skill below 500 lines by
+  moving conditional details into references.
+- Added a mandatory agent pre-push workflow that automatically reviews
+  outgoing changes and updates the appropriate `Unreleased` changelog
+  section before committing and pushing.
+
+### Security
+
+- Modifying wrapper templates now explicitly forward `-WhatIf` and
+  `-Confirm` to state-changing module functions.
+- Removed legacy-template patterns that relied on private connection
+  functions, global preferences, `trap`, or `PSModulePath` mutation.
+
 ### Planned (Breaking - targeting v2.0.0)
 
 - Migrate `Get-VMHostNetworkInfo` to the standard result-object schema

@@ -43,6 +43,7 @@ Reference these guidelines when:
 | 9 | State-Changing Operations | CRITICAL | `state-` |
 | 10 | Secret Management | HIGH | `secret-` |
 | 11 | Modular Architecture | MEDIUM-HIGH | `module-` |
+| 12 | Unattended Execution & Packaging | HIGH | `runtime-` |
 
 ## Quick Reference
 
@@ -111,6 +112,14 @@ Reference these guidelines when:
 - `module-public-private` - Separate Public (cmdlets) from Private (helpers) functions
 - `module-scripts-as-wrappers` - Scripts should be thin wrappers around module functions
 - `module-structured-output` - Functions return structured objects, never formatted output
+
+### 12. Unattended Execution & Packaging (HIGH)
+
+- `runtime-operating-profile` - Clarify account, launcher, working directory, network, proxy, and reboot behavior
+- `runtime-dependency-preflight` - Verify PowerShell and PowerCLI minimum versions before connecting
+- `runtime-single-lifecycle` - Cover the complete wrapper run with one outer try/catch/finally
+- `runtime-exit-contract` - Let only the outer wrapper choose a documented process exit code
+- `runtime-run-summary` - Emit a redacted run summary with RunId, duration, status, counts, and outputs
 
 ## How to Use
 

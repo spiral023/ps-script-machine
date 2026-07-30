@@ -67,6 +67,17 @@ Standardwert. Fragenkatalog als Inspiration (situativ auswählen/ergänzen):
   und am Ende ausweisen (Standard) oder abbrechen?
 - **Nutzung:** Einmalig/gelegentlich interaktiv oder regelmäßig automatisch
   (dann Parameter-Betrieb mit -NonInteractive erwähnen)?
+- **Betriebsprofil bei Automatisierung:** Wodurch wird das Skript verteilt
+  und gestartet (z. B. Empirum/Softwareverteilung, Scheduled Task, CI), unter
+  welchem Konto (Benutzer, Dienstkonto, SYSTEM), mit welchem
+  Arbeitsverzeichnis und welchen Netzwerk-/Proxy-Voraussetzungen?
+- **Betriebsergebnis:** Reichen die Standard-Exitcodes `0` (Erfolg bzw.
+  behandelter Teilerfolg) und `1` (fataler Fehler), oder erwartet das
+  Paketierungssystem weitere dokumentierte Codes, etwa für einen Neustart?
+- **Protokollierung:** Reicht die strukturierte Laufzusammenfassung
+  (Standard), oder wird zusätzlich ein vollständiges Transcript benötigt?
+  Darauf hinweisen, dass Transcripts potenziell sensible Konsolendaten
+  enthalten und vor einer Weitergabe geprüft werden müssen.
 
 Bei VERÄNDERNDEN Skripten zusätzlich verpflichtend:
 
@@ -81,7 +92,9 @@ Fasse VOR der Generierung auf Deutsch zusammen:
 > Das Skript wird: [was] von [Geltungsbereich] aus [vCentern] auslesen,
 > als [Format] nach [Ort] exportieren. Bei nicht erreichbaren Servern:
 > [Verhalten]. Es verändert nichts / Es verändert [was] mit Vorschau und
-> Bestätigung.
+> Bestätigung. Es läuft [interaktiv/unbeaufsichtigt] unter [Konto] via
+> [Start-/Verteilmechanismus], protokolliert [Laufzusammenfassung/Transcript]
+> und verwendet [Exitcode-Vertrag].
 
 Erst nach ausdrücklicher Bestätigung weiterarbeiten. Korrekturen einarbeiten
 und erneut zusammenfassen.
@@ -107,7 +120,13 @@ und erneut zusammenfassen.
    Für ein VERÄNDERNDES Tool außerdem den `.NOTES`-Hinweis
    "Read-only: ..." aus `templates/InteractiveWrapper.ps1` entfernen bzw.
    passend umformulieren - solche Tools folgen `templates/ChangeScript.ps1`
-   mit SupportsShouldProcess.
+   mit SupportsShouldProcess. Der Wrapper muss `-WhatIf` und `-Confirm`
+   explizit an die verändernde Modul-Funktion durchreichen; ein Common
+   Parameter am Wrapper ohne Durchreichung ist kein wirksamer Schutz.
+   Jeder Wrapper verwendet außerdem den vollständigen Laufzeitvertrag aus
+   `AGENTS.md` §9.1: PowerCLI-Mindestversionsprüfung, äußerer
+   `try`/`catch`/`finally`-Lebenszyklus, genau ein Exitpunkt und strukturierte
+   Laufzusammenfassung.
 3. **Pester-Tests** für neue Modul-Funktionen nach dem Muster der
    bestehenden Tests in `tests/Unit/` (TestHelpers.ps1 dot-sourcen,
    Mocks mit -ModuleName).
@@ -117,6 +136,17 @@ und erneut zusammenfassen.
 `.\scripts\Invoke-Build.ps1` ausführen. ALLE Tasks müssen PASSED sein
 (inkl. Coverage >= 80 % und Standalone-Bundling). Fehler selbst beheben
 und erneut bauen - den Admin damit nicht behelligen.
+
+Bei Wrappern zusätzlich durch Vertragstests absichern:
+
+- `-WhatIf`/`-Confirm` erreichen die verändernde Modul-Funktion;
+- Fehler vor, während und nach dem Verbindungsaufbau führen durch dasselbe
+  `finally` und liefern den vereinbarten Exitcode;
+- alle aufgebauten Sessions und ein gestartetes Transcript werden auch bei
+  Fehlern geschlossen;
+- eine zu alte PowerCLI-Version wird vor der Fachlogik mit einer
+  verständlichen Meldung abgelehnt;
+- Laufzusammenfassungen enthalten keine Credentials oder Secrets.
 
 Danach Abgleich gegen die Zusammenfassung aus Phase 3 (Vertragsstelle):
 Geht jede dort zugesagte Aussage - Geltungsbereich, Ausgabeformat und
@@ -133,6 +163,9 @@ Kurze deutsche Anleitung an den Admin:
   (`pwsh -File .\scripts\tools\<Name>.ps1`).
 - Was wird es fragen (vCenter-Auswahl, Anmeldung, toolspezifische Fragen).
 - Wo landet die Ausgabe.
+- Wo liegt die strukturierte Laufzusammenfassung, ob zusätzlich ein
+  potenziell sensibles Transcript aktiviert wurde und welche Exitcodes der
+  automatische Aufrufer auswerten kann.
 - Hinweis: Die verteilbare Einzeldatei liegt in
   `build/standalone/<Name>.ps1` und läuft auf jedem Rechner mit
   PowerShell 7.4+ und PowerCLI - ohne dieses Repository.

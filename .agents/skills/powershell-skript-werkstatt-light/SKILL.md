@@ -58,13 +58,18 @@ ausdrücklich nicht der Anwendungsfall dieses Skills.
 - Welche Objekte/Domäne? (Dateien/Ordner, AD-Objekte, Netzwerkgeräte,
   Cloud-Ressourcen, DB-Einträge, REST-Endpunkte, VMs, ...)
 - Läuft es interaktiv/einmalig oder später automatisiert (Scheduled Task,
-  CI-Runner, Remote-Session, Login-Skript)?
+  CI-Runner, Remote-Session, Login-Skript, Softwareverteilung wie Empirum)?
 - Zielumgebung frei (eigener Admin-Rechner) oder eingeschränkt (Kiosk,
   verwalteter Endpoint, Jump-Server mit AppLocker/WDAC)? Das entscheidet
   mit über die Language-Mode-Frage in Phase 2.
 - Woher kommen die Eingabedaten? Interaktive Parameter, eine CSV-/Textdatei
   mit einer Liste von Zielen, oder eine andere Quelle (API, DB)? Bei
   CSV-Eingabe siehe Pflichtfragen in Phase 2.
+
+Für jedes Skript vor dem Interview
+[`references/runtime-contract.md`](references/runtime-contract.md) vollständig
+lesen. Bei CSV-Eingabe, Constrained Language Mode oder PowerCLI zusätzlich die
+unten verlinkte passende Referenz lesen.
 
 ## Phase 2: Dynamisches Interview
 
@@ -75,6 +80,14 @@ Eine Frage pro Nachricht, immer mit sinnvollem Standardwert. Pflichtfragen:
   Pipeline? Ablageort (Standard: Desktop bzw. aktuelles Verzeichnis)?
 - **Fehlerverhalten:** Bei einem nicht erreichbaren/fehlerhaften Einzelziel
   weitermachen und am Ende ausweisen (Standard), oder sofort abbrechen?
+- **Betriebsprofil:** Interaktiv oder unbeaufsichtigt; Start-/Verteilweg;
+  ausführendes Konto (Benutzer, Dienstkonto, SYSTEM); Arbeitsverzeichnis;
+  Netzwerk-/Proxy-Voraussetzungen; benötigte Rechte; erwartete Exitcodes und
+  Reboot-Verhalten. Bei rein interaktiver Nutzung genügt eine kurze
+  Bestätigung der Standardannahmen aus `references/runtime-contract.md`.
+- **Protokollierung:** Strukturierte Laufzusammenfassung (Standard) oder
+  zusätzlich vollständiges Transcript? Transcripts als potenziell sensibel
+  kennzeichnen.
 - **Language Mode (Pflichtfrage):** "Soll das Skript für den Constrained
   Language Mode optimiert sein (z. B. für abgesicherte, per WDAC/AppLocker
   verwaltete Systeme), oder darf es den Full Language Mode voraussetzen
@@ -88,26 +101,18 @@ Bei VERÄNDERNDEN Skripten zusätzlich verpflichtend:
 - Bestätigung pro Objekt oder einmal für den gesamten Lauf (`-Confirm`)?
 - Erwarteter Zustand vorher/nachher, um Idempotenz beurteilen zu können.
 
-Bei CSV-/Datei-Eingabe zusätzlich verpflichtend:
-
-- Welche Spalten sind Pflicht, welche optional? Genaue Spaltennamen
-  erfragen, nicht raten.
-- Trennzeichen: Komma oder Semikolon (deutsches Excel exportiert meist
-  Semikolon)? Standard: an einer echten Beispielzeile erkennen lassen,
-  sonst nachfragen.
-- Umgang mit fehlerhaften/leeren Zeilen: überspringen und am Ende
-  ausweisen (Standard, konsistent mit dem allgemeinen Fehlerverhalten
-  oben), oder Abbruch beim ersten Fehler?
-- Umgang mit einer leeren Datei (0 Datenzeilen): als Warnung ausweisen,
-  nicht stillschweigend "erfolgreich, nichts getan" melden.
+Bei CSV-/Datei-Eingabe zusätzlich
+[`references/csv-input.md`](references/csv-input.md) vollständig lesen und
+die dortigen Pflichtfragen stellen.
 
 ## Phase 3: Zusammenfassung & Freigabe (Vertragsstelle)
 
 Vor der Generierung in ein bis zwei Sätzen zusammenfassen: Was wird von
 welchem Geltungsbereich gelesen/verändert, wohin exportiert, wie bei
-Fehlern reagiert, für welchen Language Mode gebaut und getestet. Erst nach
-ausdrücklicher Bestätigung weiterarbeiten; Korrekturen einarbeiten und
-erneut zusammenfassen.
+Fehlern reagiert, für welchen Language Mode gebaut und getestet, unter
+welchem Betriebsprofil es läuft, welche Protokollierung entsteht und welcher
+Exitcode-Vertrag gilt. Erst nach ausdrücklicher Bestätigung weiterarbeiten;
+Korrekturen einarbeiten und erneut zusammenfassen.
 
 ## Phase 4: Generierung - Grundgerüst der Standalone-Datei
 
@@ -317,59 +322,9 @@ Umlaute/Sonderzeichen kaputt).
 
 ### CSV-Eingabe verarbeiten
 
-Gilt, sobald das Skript eine Liste von Zielen aus einer Datei liest
-(z. B. Hostnamen, VM-Namen, Benutzer) statt sie interaktiv zu erfragen:
-
-- **Pfad validieren**, bevor gelesen wird:
-  `[ValidateScript({ Test-Path $_ -PathType Leaf })]` auf dem
-  Parameter, nicht erst beim `Import-Csv`-Aufruf scheitern lassen.
-- **Trennzeichen und Encoding explizit setzen**, nie dem Zufall
-  überlassen: `-Delimiter ';'` für aus deutschem Excel exportierte
-  Dateien, `-Delimiter ','` für Standard-CSV; `-Encoding utf8` bei
-  UTF-8-Dateien mit BOM, sonst werden Umlaute in Kopfzeile und Werten
-  stillschweigend falsch gelesen.
-- **Pflichtspalten sofort nach dem Import prüfen**, bevor verarbeitet
-  wird - eine fehlende Spalte soll eine klare, sprechende Fehlermeldung
-  geben, nicht später einen kryptischen "Eigenschaft nicht gefunden"-Fehler
-  mitten in der Verarbeitung.
-- **Leere Datei (0 Datenzeilen) explizit behandeln**: Warnung ausgeben,
-  nicht als stillschweigenden Erfolg mit leerem Ergebnis durchlaufen
-  lassen.
-- **Jede Zeile wie ein Einzelziel behandeln**: gleiche Teilfehler-Logik
-  wie bei mehreren Zielen (siehe `Fehlerbehandlung im Detail`) - eine
-  fehlerhafte oder unvollständige Zeile wird übersprungen und im
-  Ergebnis als Fehler ausgewiesen, der Rest der Datei läuft weiter.
-
-```powershell
-$requiredColumns = @('Name', 'Cluster')
-
-if (-not (Test-Path -LiteralPath $InputCsvPath -PathType Leaf)) {
-    throw "CSV-Datei nicht gefunden: $InputCsvPath"
-}
-
-$rows = Import-Csv -LiteralPath $InputCsvPath -Delimiter ';' -Encoding utf8
-
-if (-not $rows) {
-    Write-Warning "CSV-Datei enthält keine Datenzeilen: $InputCsvPath"
-    return
-}
-
-$missingColumns = $requiredColumns | Where-Object { $_ -notin $rows[0].PSObject.Properties.Name }
-if ($missingColumns) {
-    throw "Pflichtspalten fehlen in der CSV-Datei: $($missingColumns -join ', ')"
-}
-
-foreach ($row in $rows) {
-    try {
-        # Fachlogik pro Zeile, z. B. $row.Name / $row.Cluster verwenden
-    }
-    catch {
-        Write-Warning "Zeile fehlerhaft ($($row.Name)): $($_.Exception.Message)"
-        # als Fehler-Ergebnisobjekt ausweisen, weiter zur nächsten Zeile
-        continue
-    }
-}
-```
+Bei CSV-/Datei-Eingaben
+[`references/csv-input.md`](references/csv-input.md) vollständig lesen und
+anwenden.
 
 ### Auditierbarkeit: was in jedes Ergebnisobjekt gehört
 
@@ -440,107 +395,16 @@ Innerhalb der einen Datei trotzdem sauber trennen:
 
 ### Ergänzung für VMware/PowerCLI-Ziele
 
-Zusätzlich zu den obigen, domänenneutralen Regeln gilt bei
-PowerCLI-Skripten (vCenter/ESXi-Automatisierung):
-
-- **Explizite `-Server`-Übergabe an jedes PowerCLI-Cmdlet**, statt auf
-  einen impliziten globalen Default-Server zu vertrauen - sonst
-  arbeitet das Skript bei mehreren gleichzeitig verbundenen vCentern
-  unbemerkt gegen das falsche.
-- **Einmal verbinden (`Connect-VIServer`), Session wiederverwenden**,
-  Trennen (`Disconnect-VIServer -Confirm:$false`) im `finally`-Block -
-  folgt 1:1 dem `Ressourcen-/Session-Lebenszyklus` oben.
-- **Für unbeaufsichtigte Läufe konfigurieren**, damit kein interaktiver
-  Prompt den Lauf blockiert:
-  `Set-PowerCLIConfiguration -Scope Session -ParticipateInCEIP $false -Confirm:$false`
-  (Zertifikatsverhalten dabei gemäß der Sicherheitsregel oben behandeln,
-  nicht stillschweigend global auf "ignorieren" stellen).
-- **Massenabruf statt Einzelabruf pro CSV-Zeile/Ziel**: z. B. einmal
-  `Get-VMHost`/`Get-VM` für alle Objekte holen und in einer Hashtable
-  nach Namen nachschlagen, statt pro Zeile erneut gegen vCenter zu
-  fragen - folgt der `Datenabruf-Effizienz`-Regel oben.
-- **Nicht gefundene Namen** (Tippfehler in der CSV, zwischenzeitlich
-  gelöschtes Objekt) als Teilfehler im Ergebnisobjekt ausweisen, nicht
-  das ganze Skript abbrechen.
-- **`ConnectionState` je Host prüfen, bevor abgefragt wird**: Hosts im
-  Wartungsmodus oder getrennte Hosts liefern sonst kryptische Fehler
-  mitten in der Verarbeitung statt einer sprechenden Zeile im Ergebnis:
-
-  ```powershell
-  foreach ($vmHost in $vmHosts) {
-      if ($vmHost.ConnectionState -ne 'Connected') {
-          Write-Warning "$($vmHost.Name) ist nicht verbunden (Status: $($vmHost.ConnectionState)), wird übersprungen."
-          continue
-      }
-      # ... eigentliche Abfrage nur für verbundene Hosts ...
-  }
-  ```
-
-- **`Get-View`/`.ExtensionData` für Properties, die keine Cmdlets
-  liefern** (z. B. CDP-Nachbarschaftsinformationen, detaillierte
-  Hardware-/Konfigurationsdaten):
-
-  ```powershell
-  $networkSystem = Get-View -Id $vmHost.ExtensionData.ConfigManager.NetworkSystem -Server $viConnection
-  $networkHints = $networkSystem.QueryNetworkHint([string[]]@())
-  ```
-
-- **Mehrere vCenter gleichzeitig verbunden:** über das Array der
-  Verbindungen iterieren, nie stillschweigend nur die erste/letzte
-  verwenden, und **jedes Ergebnisobjekt bekommt eine `VIServer`-Property**
-  mit dem Namen des vCenters, aus dem es stammt - sonst sind Ergebnisse
-  aus mehreren vCentern in einer gemeinsamen Ausgabe/Export nicht mehr
-  eindeutig zuordenbar:
-
-  ```powershell
-  foreach ($viConnection in $viConnections) {
-      $vmHosts = Get-VMHost -Server $viConnection
-      foreach ($vmHost in $vmHosts) {
-          [PSCustomObject]@{
-              PSTypeName = 'Custom.Verb-Noun.Result'
-              VIServer   = $viConnection.Name
-              VMHost     = $vmHost.Name
-              # ... weitere Fachdaten ...
-          }
-      }
-  }
-  ```
+Bei vCenter-/ESXi-/PowerCLI-Aufgaben
+[`references/powercli-standalone.md`](references/powercli-standalone.md)
+vollständig lesen und zusätzlich den Skill `vmware-powercli-scripts`
+anwenden.
 
 ## Language Mode: Constrained vs. Full
 
-|                                                                                           | Full Language Mode                                          | Constrained Language Mode                                                                                                 |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Wann                                                                                      | Eigener Rechner, Admin-Kontext, keine WDAC/AppLocker-Policy | Abgesicherte/verwaltete Endpoints, Jump-Server, Kiosk-Systeme                                                             |
-| `Add-Type`, COM (`New-Object -ComObject`)                                                 | erlaubt                                                     | **blockiert**                                                                                                             |
-| `New-Object`/Typumwandlung auf beliebige .NET-Klassen                                     | erlaubt                                                     | nur auf eine kleine Kernliste (`string`, `int`, `bool`, `datetime`, `pscustomobject`, `hashtable`, `array`, `xml`, ...)   |
-| Methodenaufrufe auf beliebige .NET-Objekte                                                | erlaubt                                                     | nur auf Objekte der Kernliste; kompilierte Cmdlets/Module funktionieren weiter, da sie außerhalb des Language Mode laufen |
-| Dynamisch aus Strings gebaute Scriptblocks (`[scriptblock]::Create`, `Invoke-Expression`) | technisch möglich (aber ohnehin verboten, s. o.)            | **blockiert**                                                                                                             |
-| Reflection, `$ExecutionContext`-Tricks                                                    | erlaubt                                                     | **blockiert**                                                                                                             |
-
-Konsequenz beim Schreiben für Constrained Language Mode:
-
-- Nur eingebaute Cmdlets und Module verwenden, keine direkte
-  .NET-Instanziierung/-Methodenaufrufe außerhalb der Kernliste.
-- Braucht die Aufgabe zwingend `Add-Type`/COM/Reflection: das dem Nutzer
-  transparent machen und ggf. auf Full Language Mode zurückfragen, statt
-  eine Konstruktion zu bauen, die dort ohnehin nicht laufen wird.
-- Kein `Invoke-Expression` und keine dynamisch gebauten Scriptblocks
-  (gilt hier ohnehin bereits als Sicherheitsregel).
-
-Testen ohne irgendetwas zu installieren (nur PowerShell selbst nötig):
-
-```powershell
-pwsh -NoProfile -Command '$ExecutionContext.SessionState.LanguageMode = "ConstrainedLanguage"; & "<Pfad-zum-Skript>.ps1" -WhatIf'
-```
-
-Das erzwingt den Language Mode nur in diesem Wegwerf-Prozess (keine
-Gruppenrichtlinie/WDAC-Konfiguration nötig) und lässt jeden nicht
-erlaubten Typ-/Methodenaufruf sofort als Laufzeitfehler sichtbar werden.
-
-Wurde Full Language Mode gewählt: keine Einschränkungen über die
-allgemeinen Standards hinaus - `Add-Type`/COM trotzdem nur einsetzen, wenn
-wirklich nötig, falls das Skript später doch auf einem eingeschränkten
-System landet.
+[`references/language-mode.md`](references/language-mode.md) vollständig
+lesen, sobald Constrained Language Mode gefordert oder eine per
+WDAC/AppLocker verwaltete Zielumgebung genannt wird.
 
 ## Selbstprüfung ohne Zusatzmodule
 
@@ -585,6 +449,13 @@ PowerShell selbst mitbringt:
 - [ ] `try`/`catch` vorhanden, strukturiertes `PSCustomObject` mit `PSTypeName` als Rückgabe
 - [ ] Keine fest codierten Zugangsdaten, kein `Invoke-Expression`
 - [ ] Language-Mode-Anforderung erfragt, umgesetzt und getestet
+- [ ] Betriebsprofil und Exitcode-Vertrag geklärt und in `.NOTES` dokumentiert
+- [ ] Abhängigkeiten samt Mindestversionen vor der Fachlogik geprüft
+- [ ] Ein äußerer Laufzeit-Lebenszyklus mit genau einem Exitpunkt vorhanden
+- [ ] Laufzusammenfassung enthält RunId, UTC-Start/Ende, Dauer, Status,
+      Exitcode, Zählwerte und erzeugte Dateien
+- [ ] Transcripts nur bewusst aktiviert und als potenziell sensibel
+      dokumentiert; Aufbewahrung auf ein werkzeugeigenes Logverzeichnis begrenzt
 - [ ] `Parser.ParseFile` fehlerfrei, manueller Dry-Run durchgeführt
 - [ ] `$ErrorActionPreference = 'Stop'` und `Set-StrictMode -Version Latest` gesetzt
 - [ ] Ressourcen/Sessions werden im `finally`-Block geschlossen
@@ -602,7 +473,8 @@ PowerShell selbst mitbringt:
       Encoding explizit gesetzt, leere Datei behandelt, fehlerhafte Zeilen
       als Teilfehler ausgewiesen
 - [ ] Bei PowerCLI-Zielen: `-Server` explizit an jedes Cmdlet übergeben,
-      `Set-PowerCLIConfiguration` für unbeaufsichtigte Läufe gesetzt
+      PowerCLI-Mindestversion geprüft und unbeaufsichtigte Ausführung ohne
+      blockierende Prompts sichergestellt
 - [ ] Bei PowerCLI-Zielen: `ConnectionState` je Host geprüft, bei mehreren
       vCentern `VIServer`-Property in jedem Ergebnisobjekt vorhanden
 - [ ] Abgleich gegen Zusammenfassung aus Phase 3: jede Zusage erfüllt
@@ -613,3 +485,5 @@ Kurze Anleitung an den Nutzer: Wo liegt das Skript (eine einzelne
 `.ps1`-Datei, kein Modul, keine weiteren Dateien nötig), wie startet man
 es (`pwsh -File .\Skript.ps1 ...`), was wird es fragen/tun, wo landet die
 Ausgabe, und für welchen Language Mode wurde es gebaut und getestet.
+Zusätzlich nennen: Betriebsprofil, Laufzusammenfassung/Transcript,
+Aufbewahrung und Exitcodes für automatische Aufrufer.

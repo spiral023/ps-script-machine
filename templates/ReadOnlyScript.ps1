@@ -41,6 +41,7 @@
 
 .NOTES
     This is a read-only script. It does not modify any vSphere configuration.
+    Exit codes: 0 = success/handled partial success, 1 = fatal error.
 #>
 [CmdletBinding()]
 param(
@@ -66,52 +67,90 @@ param(
     $LogFile
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$minimumPowerCLIVersion = [version]'13.2.0'
+$runId = [guid]::NewGuid().ToString()
+$startedAt = Get-Date
+$exitCode = 0
+$runStatus = 'Running'
+$errorMessage = $null
+$connection = $null
+$data = @()
+$exportedFiles = @()
+
 try {
-    # Import the module (adjust path as needed)
+    $powerCliModule = Get-Module -ListAvailable -Name 'VMware.PowerCLI', 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Version -ge $minimumPowerCLIVersion } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+    if (-not $powerCliModule) {
+        throw "VMware PowerCLI $minimumPowerCLIVersion or newer is required."
+    }
+
     $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\src\ps-script-machine\ps-script-machine.psd1'
-    Import-Module -Name $modulePath -Force -ErrorAction Stop
+    Import-Module -Name (Resolve-Path -LiteralPath $modulePath).Path -Force -ErrorAction Stop
 
-    # Connect to vCenter
     Write-Verbose "Connecting to $Server..."
-    $session = Connect-VIServerSession -Server $Server -Credential $Credential -ErrorAction Stop
-
-    if (-not $session) {
-        throw "Failed to connect to $Server"
+    $connection = Connect-MultiVIServer -Server @($Server) -Credential $Credential -NonInteractive -ErrorAction Stop
+    if (@($connection.Sessions).Count -eq 0) {
+        throw "Failed to connect to $Server."
+    }
+    if ($connection.RunId) {
+        $runId = [string]$connection.RunId
     }
 
-    # Retrieve data
-    Write-Verbose "Retrieving data..."
-    $data = Get-CdpNetworkInfo -VIServer $session -ErrorAction Stop
-
-    # Output results
-    if ($data) {
-        $data | Format-Table -AutoSize
-
-        # Export if requested
-        if ($OutputPath) {
-            $exportedFiles = Export-ModuleData -Data $data -OutputPath $OutputPath -Format CSV, JSON -Force -ErrorAction Stop
-            Write-Verbose "Exported to: $($exportedFiles -join ', ')"
-        }
+    Write-Verbose 'Retrieving data...'
+    $data = @(Get-CdpNetworkInfo -VIServer $connection.Sessions[0] -ErrorAction Stop)
+    if ($data.Count -eq 0) {
+        Write-Warning 'No data retrieved.'
     }
-    else {
-        Write-Warning "No data retrieved."
+    elseif ($OutputPath) {
+        $exportedFiles = @(
+            Export-ModuleData -Data $data -OutputPath $OutputPath -Format CSV, JSON -Force -ErrorAction Stop
+        )
     }
+
+    $data
+    $runStatus = if (@($connection.Skipped).Count -gt 0) { 'PartialSuccess' } else { 'Success' }
 }
 catch {
-    Write-Error "Script failed: $_"
-    exit 1
+    $exitCode = 1
+    $runStatus = 'Failed'
+    $errorMessage = $_.Exception.Message
+    Write-Error -Message "Script failed: $errorMessage" -ErrorAction Continue
 }
 finally {
-    # Clean up: disconnect from vCenter
-    if ($session) {
-        try {
+    if ($connection) {
+        foreach ($session in @($connection.Sessions)) {
             Disconnect-VIServer -Server $session -Confirm:$false -ErrorAction SilentlyContinue
-            Write-Verbose "Disconnected from $Server"
-        }
-        catch {
-            Write-Warning "Failed to disconnect from $Server`: $_"
         }
     }
+
+    $completedAt = Get-Date
+    $runSummary = [ordered]@{
+        PSTypeName      = 'ps-script-machine.ToolRunSummary'
+        ToolName        = $MyInvocation.MyCommand.Name
+        RunId           = $runId
+        StartedAtUtc    = $startedAt.ToUniversalTime().ToString('o')
+        CompletedAtUtc  = $completedAt.ToUniversalTime().ToString('o')
+        DurationSeconds = [math]::Round(($completedAt - $startedAt).TotalSeconds, 3)
+        Status          = $runStatus
+        ExitCode        = $exitCode
+        ResultCount     = $data.Count
+        OutputFiles     = @($exportedFiles)
+        ErrorMessage    = $errorMessage
+    }
+
+    if ($LogFile) {
+        $logDirectory = Split-Path -Path $LogFile -Parent
+        if ($logDirectory -and -not (Test-Path -LiteralPath $logDirectory)) {
+            $null = New-Item -Path $logDirectory -ItemType Directory -Force
+        }
+        $runSummary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $LogFile -Encoding utf8
+    }
+    Write-Information -MessageData ($runSummary | ConvertTo-Json -Compress -Depth 5) -InformationAction Continue
 }
+
+exit $exitCode

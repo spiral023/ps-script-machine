@@ -203,6 +203,44 @@ Trennung:
 - Logs → Write-ModuleLog
 - Exporte → Export-ModuleData
 
+### 9.1 Betriebs- und Laufzeitvertrag für Wrapper
+
+Interaktive und automatisiert gestartete Wrapper (`scripts/tools/*.ps1` und
+die daraus gebauten Standalone-Skripte) müssen zusätzlich:
+
+- **das Betriebsprofil kennen**: interaktiv oder unbeaufsichtigt, ausführendes
+  Konto (Benutzer, Dienstkonto, SYSTEM), Verteilmechanismus
+  (z. B. Empirum/Softwareverteilung, Scheduled Task, CI), Arbeitsverzeichnis,
+  benötigte Netzwerk-/Proxy-Verbindungen und erwartete Exitcodes;
+- **Abhängigkeiten vor der Fachlogik prüfen**: PowerShell-Version,
+  PowerCLI-Verfügbarkeit und PowerCLI-Mindestversion. Fehlermeldungen nennen
+  die gefundene und die benötigte Version sowie eine sichere Behebung;
+- **den gesamten Lauf mit einem äußeren `try`/`catch`/`finally` schützen**:
+  Preflight, Modulimport, optionale Protokollierung, Verbindungsaufbau,
+  Fachlogik und Export liegen innerhalb dieses Lebenszyklus;
+- **genau einen Exitpunkt am Ende besitzen**. Nur der äußerste Wrapper legt
+  den Prozess-Exitcode fest; Modul- und Hilfsfunktionen verwenden `throw`
+  oder strukturierte Fehlerobjekte, niemals `exit`;
+- standardmäßig `0` für Erfolg oder fachlich behandelten Teilerfolg und `1`
+  für einen fatalen Laufzeitfehler verwenden. Abweichende Codes (z. B. vom
+  Paketierungssystem erwartete Reboot-/Teilerfolgscodes) müssen im
+  Betriebsprofil vereinbart und in `.NOTES` dokumentiert sein;
+- **eine Laufzusammenfassung** mit `RunId`, UTC-Start/Ende, Dauer, Status,
+  Exitcode, Ziel-/Ergebnis-/Fehleranzahl und erzeugten Dateien schreiben;
+- Ressourcen, Transcripts und temporär geänderte Process-/Session-
+  Konfiguration im `finally` bereinigen bzw. auf den vorherigen Zustand
+  zurücksetzen;
+- strukturierte, geheimnisbereinigte Laufdaten gegenüber vollständigen
+  Transcripts bevorzugen. Transcripts sind optional, als potenziell sensibel
+  zu kennzeichnen und dürfen nie ungeprüft weitergegeben werden;
+- eine Log-Aufbewahrung nur innerhalb eines eindeutig werkzeugeigenen
+  Logverzeichnisses durchführen. Keine allgemeinen Log- oder Benutzerordner
+  rekursiv bereinigen.
+
+Manuelle Versionshistorien im Skriptkopf ersetzen nicht Git. In Logs und
+Build-Artefakten werden stattdessen Modul-/Toolversion und, falls vorhanden,
+Build- oder Commit-ID festgehalten.
+
 ## 10. Tests
 
 ### Unit-Tests (Pester 5)
@@ -244,6 +282,13 @@ Eine Funktion ist erst fertig, wenn:
 - [ ] Strukturierte Ergebnisobjekte mit `PSTypeName`
 - [ ] `VIServer` in Ergebnisobjekten
 - [ ] Zeitstempel und `RunId` in Ergebnisobjekten
+- [ ] Wrapper: Betriebsprofil (interaktiv/unbeaufsichtigt, Konto,
+      Verteilung, Arbeitsverzeichnis, Netzwerk/Proxy, Exitcodes) geklärt
+- [ ] Wrapper: PowerCLI-Verfügbarkeit und Mindestversion vorab geprüft
+- [ ] Wrapper: äußerer Laufzeit-Lebenszyklus und genau ein Exitpunkt vorhanden
+- [ ] Wrapper: Laufzusammenfassung mit Status, Dauer und Exitcode vorhanden
+- [ ] Wrapper: optionale Transcripts als sensibel dokumentiert und
+      Log-Aufbewahrung auf das werkzeugeigene Verzeichnis begrenzt
 - [ ] Explizite `-Server`-Übergabe an PowerCLI-Cmdlets
 - [ ] Fehlerbehandlung mit `try`/`catch`
 - [ ] Keine fest codierten Werte
@@ -252,10 +297,19 @@ Eine Funktion ist erst fertig, wenn:
 - [ ] PSScriptAnalyzer ohne nicht begründete Fehler
 - [ ] Code-Coverage ≥ 80%
 - [ ] Dokumentation aktualisiert
+- [ ] `CHANGELOG.md` unter `## [Unreleased]` für jede nennenswerte Änderung
+      aktualisiert oder bewusst als nicht changelogpflichtig bewertet
 
 ## 12. Vorgehen bei neuen Funktionen
 
-1. **Vorlage wählen**: `templates/PublicFunction.ps1` (read-only) oder `templates/ChangeScript.ps1` (verändernd)
+1. **Vorlage wählen**: Modul-Funktionen entstehen aus
+   `templates/PublicFunction.ps1` (öffentlich) bzw.
+   `templates/PrivateFunction.ps1` (privat). Der Generator
+   `scripts/New-PowerCLITool.ps1` ergänzt bei `-Type Change`
+   `SupportsShouldProcess`. Interaktive Wrapper entstehen ausschließlich aus
+   `templates/InteractiveWrapper.ps1`; bei verändernden Wrappern müssen
+   `-WhatIf` und `-Confirm` an die verändernde Modul-Funktion durchgereicht
+   werden.
 2. **Funktion erstellen**: In `src/ps-script-machine/Public/` oder `Private/`
 3. **Test erstellen**: In `tests/Unit/` mit `templates/PesterTest.Tests.ps1` als Vorlage
 4. **PowerCLI-Cmdlets mocken**: In Unit-Tests
@@ -291,3 +345,49 @@ Der Build-Prozess führt aus:
 7. Geheimnis-Scan
 
 Ein Fehler in einem Schritt schlägt den gesamten Build fehl.
+
+## 14. Changelog- und Push-Automatik für Coding Agents
+
+`CHANGELOG.md` folgt
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) und Semantic
+Versioning. Coding Agents pflegen es **automatisch als verpflichtenden Teil
+jedes Push-Workflows**. Der Nutzer muss nicht gesondert daran erinnern.
+
+### Vor jedem `git push`
+
+1. Ausgehende Commits und noch nicht committete Änderungen prüfen
+   (`git status`, `git diff`, bei vorhandenem Upstream zusätzlich
+   `git log @{upstream}..HEAD`).
+2. Bewerten, ob sich Verhalten, Funktionen, Sicherheit, Schnittstellen,
+   Templates, Build-/Betriebsabläufe, Skills oder Agent-Regeln
+   nennenswert geändert haben.
+3. Falls ja, unter `## [Unreleased]` einen knappen, nutzerorientierten
+   Eintrag in der passenden Rubrik ergänzen:
+   `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` oder `Security`.
+4. Bestehende Einträge lesen und erweitern, statt denselben Sachverhalt
+   doppelt einzutragen.
+5. `CHANGELOG.md` zusammen mit den zugehörigen Änderungen committen. Ist
+   bereits ein lokaler Commit vorhanden, einen zusätzlichen
+   Changelog-Commit anlegen, sofern der Nutzer nicht ausdrücklich eine
+   andere Commit-Strategie verlangt.
+6. Erst danach Build-/Prüfschritte abschließen und pushen.
+
+Diese Changelog-Aktualisierung gilt bei einer ausdrücklichen Push-Anweisung
+als normale, bereits autorisierte Vorbereitung des Pushs. Sie benötigt keine
+weitere Rückfrage. Der Agent darf einen Push mit changelogpflichtigen
+Änderungen nicht ausführen, solange der passende `Unreleased`-Eintrag fehlt
+oder nur uncommittet vorliegt.
+
+### Nicht changelogpflichtig
+
+Reine Tippfehler, Formatierung ohne Verhaltensänderung, lokale
+Debug-Artefakte und ausschließlich interne Testdaten benötigen normalerweise
+keinen Eintrag. Im Zweifel einen kurzen Eintrag ergänzen.
+
+### Releases
+
+Bei einer Release-Erstellung die betreffenden `Unreleased`-Einträge unter
+eine neue Überschrift `## [X.Y.Z] - YYYY-MM-DD` verschieben und anschließend
+einen leeren Abschnitt `## [Unreleased]` für kommende Änderungen stehen
+lassen. Keine manuell gepflegte History in Skriptköpfen als Ersatz für das
+Changelog verwenden.

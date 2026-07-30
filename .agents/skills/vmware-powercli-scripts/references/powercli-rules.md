@@ -71,6 +71,11 @@ Comprehensive PowerShell scripting guide for VMware PowerCLI and vSphere automat
     - 11.1 [Public vs Private Functions](#111-public-vs-private-functions)
     - 11.2 [Scripts as Wrappers](#112-scripts-as-wrappers)
     - 11.3 [Structured Output Only](#113-structured-output-only)
+12. [Unattended Execution & Packaging](#12-unattended-execution--packaging) — **HIGH**
+    - 12.1 [Operating Profile](#121-operating-profile)
+    - 12.2 [Dependency Preflight](#122-dependency-preflight)
+    - 12.3 [Single Wrapper Lifecycle](#123-single-wrapper-lifecycle)
+    - 12.4 [Exit Contract and Run Summary](#124-exit-contract-and-run-summary)
 
 ---
 
@@ -939,3 +944,49 @@ $result | Format-Table
 $result | Export-Csv
 $result | ConvertTo-Json
 ```
+
+---
+
+## 12. Unattended Execution & Packaging
+
+### 12.1 Operating Profile
+
+Before generating an automation wrapper, clarify:
+
+- interactive or unattended execution;
+- launcher/distribution system such as software deployment, Scheduled Task,
+  remote execution, or CI;
+- user, service account, or SYSTEM context;
+- working directory and writable output/temp locations;
+- DNS, firewall, proxy, and credential availability;
+- expected exit codes and reboot behavior.
+
+Do not assume that a desktop, mapped drive, user profile, current directory,
+or interactive credential prompt exists under a service or SYSTEM account.
+
+### 12.2 Dependency Preflight
+
+Check the required PowerShell and PowerCLI minimum versions before module
+import, connection, or state change. Report the found version, required
+version, and a safe remediation. Do not mutate `PSModulePath` globally or
+silently install modules during production execution.
+
+### 12.3 Single Wrapper Lifecycle
+
+Place preflight, optional logging, module import, connection, operation, and
+export inside one outer `try`/`catch`/`finally`. Initialize resources before
+the `try`; disconnect sessions and stop optional transcripts in `finally`.
+Helper and module functions throw or return structured errors and never call
+`exit`.
+
+### 12.4 Exit Contract and Run Summary
+
+Only the outer wrapper chooses the process exit code. Use `0` for success or
+an explicitly handled partial success and `1` for a fatal run by default.
+Use deployment-specific codes only when documented by the calling system.
+
+Write a redacted run summary containing tool version, `RunId`, UTC start/end,
+duration, status, exit code, requested/connected/skipped/failed target
+counts, result count, and output files. Treat full transcripts as potentially
+sensitive and make them optional. Apply retention only to files owned by the
+tool inside its dedicated log directory.

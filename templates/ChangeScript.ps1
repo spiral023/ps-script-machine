@@ -45,6 +45,7 @@
 .NOTES
     This script performs modifying operations. Always use -WhatIf first to
     verify the intended changes before executing.
+    Exit codes: 0 = success/handled partial success, 1 = fatal error.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
@@ -70,44 +71,84 @@ param(
     $NewValue
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$minimumPowerCLIVersion = [version]'13.2.0'
+$runId = [guid]::NewGuid().ToString()
+$startedAt = Get-Date
+$exitCode = 0
+$runStatus = 'Running'
+$errorMessage = $null
+$connection = $null
+$result = @()
+
 try {
-    # Import the module
+    $powerCliModule = Get-Module -ListAvailable -Name 'VMware.PowerCLI', 'VMware.VimAutomation.Core' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Version -ge $minimumPowerCLIVersion } |
+        Sort-Object Version -Descending |
+        Select-Object -First 1
+    if (-not $powerCliModule) {
+        throw "VMware PowerCLI $minimumPowerCLIVersion or newer is required."
+    }
+
     $modulePath = Join-Path -Path $PSScriptRoot -ChildPath '..\src\ps-script-machine\ps-script-machine.psd1'
-    Import-Module -Name $modulePath -Force -ErrorAction Stop
+    Import-Module -Name (Resolve-Path -LiteralPath $modulePath).Path -Force -ErrorAction Stop
 
-    # Connect to vCenter
     Write-Verbose "Connecting to $Server..."
-    $session = Connect-VIServerSession -Server $Server -Credential $Credential -ErrorAction Stop
-
-    if (-not $session) {
-        throw "Failed to connect to $Server"
+    $connection = Connect-MultiVIServer -Server @($Server) -Credential $Credential -NonInteractive -ErrorAction Stop
+    if (@($connection.Sessions).Count -eq 0) {
+        throw "Failed to connect to $Server."
+    }
+    if ($connection.RunId) {
+        $runId = [string]$connection.RunId
     }
 
-    # Perform the modifying operation
-    # The function must support SupportsShouldProcess and ConfirmImpact='High'
+    $operationParameters = @{
+        VIServer   = $connection.Sessions[0]
+        Name       = $TargetName
+        Value      = $NewValue
+        ErrorAction = 'Stop'
+    }
+    if ($PSBoundParameters.ContainsKey('WhatIf')) {
+        $operationParameters['WhatIf'] = $WhatIfPreference
+    }
+    if ($PSBoundParameters.ContainsKey('Confirm')) {
+        $operationParameters['Confirm'] = [bool]$PSBoundParameters['Confirm']
+    }
+
     Write-Verbose "Modifying $TargetName on $Server..."
-    $result = Set-Something -VIServer $session -Name $TargetName -Value $NewValue -ErrorAction Stop
-
-    # Output result
-    if ($result) {
-        $result | Format-Table -AutoSize
-    }
+    $result = @(Set-Something @operationParameters)
+    $result
+    $runStatus = if (@($connection.Skipped).Count -gt 0) { 'PartialSuccess' } else { 'Success' }
 }
 catch {
-    Write-Error "Script failed: $_"
-    exit 1
+    $exitCode = 1
+    $runStatus = 'Failed'
+    $errorMessage = $_.Exception.Message
+    Write-Error -Message "Script failed: $errorMessage" -ErrorAction Continue
 }
 finally {
-    # Clean up: disconnect from vCenter
-    if ($session) {
-        try {
+    if ($connection) {
+        foreach ($session in @($connection.Sessions)) {
             Disconnect-VIServer -Server $session -Confirm:$false -ErrorAction SilentlyContinue
-            Write-Verbose "Disconnected from $Server"
-        }
-        catch {
-            Write-Warning "Failed to disconnect from $Server`: $_"
         }
     }
+
+    $completedAt = Get-Date
+    $runSummary = [ordered]@{
+        PSTypeName      = 'ps-script-machine.ToolRunSummary'
+        ToolName        = $MyInvocation.MyCommand.Name
+        RunId           = $runId
+        StartedAtUtc    = $startedAt.ToUniversalTime().ToString('o')
+        CompletedAtUtc  = $completedAt.ToUniversalTime().ToString('o')
+        DurationSeconds = [math]::Round(($completedAt - $startedAt).TotalSeconds, 3)
+        Status          = $runStatus
+        ExitCode        = $exitCode
+        ResultCount     = $result.Count
+        ErrorMessage    = $errorMessage
+    }
+    Write-Information -MessageData ($runSummary | ConvertTo-Json -Compress -Depth 5) -InformationAction Continue
 }
+
+exit $exitCode
