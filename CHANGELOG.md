@@ -23,12 +23,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Optimized progressive disclosure for the PowerShell-Skript-Werkstatt Light
+  skill: clarified its standalone-only trigger description, reduced the main
+  skill to workflow and reference routing, and moved implementation and
+  verification details into a phase-loaded local reference.
+- Made the PowerShell-Skript-Werkstatt Light skill self-contained for
+  PowerCLI standalone scripts, including complete rules for dependency
+  preflight, credentials, session ownership, certificate handling,
+  multi-vCenter execution, vSphere API access, state changes, partial
+  failures, result objects, and manual verification; refreshed both
+  upload-ready skill packages from the same source.
 - Refactored wrapper templates and `Export-CdpInformation.ps1` to use the
   public `Connect-MultiVIServer` API, a single outer lifecycle, one final
   process exit, PowerCLI 13.2.0 preflight, and structured run summaries.
 - Made full transcripts opt-in and documented them as potentially sensitive.
-- Reduced the PowerShell-Skript-Werkstatt Light skill below 500 lines by
-  moving conditional details into references.
 - Added a mandatory agent pre-push workflow that automatically reviews
   outgoing changes and updates the appropriate `Unreleased` changelog
   section before committing and pushing.

@@ -167,20 +167,73 @@ Describe 'Connection and change safety contracts' {
 }
 
 Describe 'Skill progressive disclosure contract' {
-    It 'keeps the light skill below 500 lines' {
-        (Get-Content -LiteralPath $script:lightSkillPath).Count | Should -BeLessThan 500
+    It 'keeps the routing skill below 250 lines' {
+        (Get-Content -LiteralPath $script:lightSkillPath).Count | Should -BeLessThan 250
     }
 
-    It 'provides all conditional runtime references' {
+    It 'provides all routed references' {
         $skillDirectory = Split-Path -Path $script:lightSkillPath -Parent
         foreach ($referenceName in @(
                 'runtime-contract.md',
                 'csv-input.md',
                 'language-mode.md',
-                'powercli-standalone.md'
+                'powercli-standalone.md',
+                'standalone-implementation.md'
             )) {
             Test-Path -LiteralPath (Join-Path $skillDirectory "references\$referenceName") |
                 Should -BeTrue
+        }
+    }
+
+    It 'uses an explicit standalone-only trigger description' {
+        $description = Get-Content -LiteralPath $script:lightSkillPath |
+            Where-Object { $_ -match '^description:' }
+
+        $description | Should -Match 'ausdrücklich'
+        $description | Should -Match 'Standalone-Skript'
+        $description | Should -Match '\.ps1'
+        $description | Should -Match 'Nicht für mehrteilige Module'
+        $description | Should -Not -Match 'Use when\s*-'
+    }
+
+    It 'routes references by phase and variant from the main skill' {
+        $content = Get-Content -LiteralPath $script:lightSkillPath -Raw
+
+        foreach ($routingMarker in @(
+                'Immer vor dem Interview',
+                'CSV-/Datei-Eingaben',
+                'Constrained Language Mode',
+                'vCenter-, ESXi- oder PowerCLI-Aufgabe',
+                'Erst nach der Freigabe aus Phase 3'
+            )) {
+            $content | Should -Match ([regex]::Escape($routingMarker))
+        }
+    }
+
+    It 'contains a self-contained PowerCLI standalone contract' {
+        $skillDirectory = Split-Path -Path $script:lightSkillPath -Parent
+        $skillContent = Get-Content -LiteralPath $script:lightSkillPath -Raw
+        $powerCliReferencePath = Join-Path $skillDirectory 'references\powercli-standalone.md'
+        $powerCliContent = Get-Content -LiteralPath $powerCliReferencePath -Raw
+
+        $skillContent | Should -Not -Match 'vmware-powercli-scripts'
+        $powerCliContent | Should -Not -Match 'vmware-powercli-scripts'
+
+        foreach ($requiredRule in @(
+                'Abhängigkeits-Preflight',
+                'Credentials und Secrets',
+                'Session-Eigentum',
+                'PowerCLI-Konfiguration und Zertifikate',
+                'Mehrere vCenter',
+                'Datenabruf und vSphere API',
+                'Verändernde Operationen',
+                'Eigenprüfung vor der Übergabe',
+                'DefaultVIServer',
+                'VIServer',
+                'SupportsShouldProcess',
+                'Get-View -Server'
+            )) {
+            $powerCliContent | Should -Match ([regex]::Escape($requiredRule))
         }
     }
 }
